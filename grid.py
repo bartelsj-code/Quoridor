@@ -1,13 +1,15 @@
 import numpy as np
-from utils import get_display_string
+from utils import get_display_string, get_display_string_pl
+import heapq
 
-# N = 1     # 00000001
-# E = 2     # 00000010
-# S = 4     # 00000100
-# W = 8     # 00001000
-# H = 16    # 00010000
-# V = 32    # 00100000
-# oc = 64   # 01000000
+# N = 1     # 00000001   a wall is disconnecting me from northern..
+# E = 2     # 00000010   eastern...
+# S = 4     # 00000100   southern...
+# W = 8     # 00001000   ...western neighbor
+# H = 16    # 00010000   a horizontal wall cannot be added that is centered at the top right corner of this square
+# V = 32    # 00100000   a vertical wall cannot be added that is centered at the top right corner of this square
+# oc = 64   # 01000000   a player pawn (not identified) is occupying this square
+# mark = 128 #10000000   this square has been marked for some debugging reason
 
 #array is rotated 90 degrees clockwise so that x and y can be input in that order
 
@@ -49,6 +51,18 @@ class SquareGrid:
                 if not num & 32:
                     legal_moves.append((x, y, 1))
         return legal_moves
+    
+    def mark(self,coords):
+        x, y =coords
+        self.arr[x, y] |= 128
+
+    def clear(self, coords):
+        x, y =coords
+        self.arr[x, y] &= 127
+    
+    def clear_all(self):
+        self.arr &= 127
+
 
     def get_empty_grid(self):
         return np.array(
@@ -63,6 +77,77 @@ class SquareGrid:
                 [ 4, 0, 0, 0, 0, 0, 0, 0, 1],                
                 [ 6, 2, 2, 2, 2, 2, 2, 2, 3]
                 ], dtype=np.uint8)
+    
+    def get_neighbors(self, p):
+        x, y = p
+        barriers = (1, 2, 4, 8)
+        cell_value = self.arr[x, y]  # Avoid multiple lookups
+        
+        return [
+            (nx, ny) for i, (dx, dy) in enumerate([(0, 1), (1, 0), (0, -1), (-1, 0)])
+            if 0 <= (nx := x + dx) < 9 and 0 <= (ny := y + dy) < 9 and not (cell_value & barriers[i])
+        ]
+    
+    def are_connected(self, p1, pset):
+        
+        pset = set(pset)
+        to_visit = []  
+        g_cost = {p1: 0} 
+        
+        
+        def heuristic(p):
+            return min(abs(p[0] - goal[0]) + abs(p[1] - goal[1]) for goal in pset)
+        
+        heapq.heappush(to_visit, (heuristic(p1), 0, p1)) 
+        
+        while to_visit:
+            _, g, curr = heapq.heappop(to_visit)
+            
+            self.mark(curr) 
+            
+            if curr in pset:
+                return True 
+            
+            for neighbor in self.get_neighbors(curr):
+                new_g = g + 1 
+                if neighbor not in g_cost or new_g < g_cost[neighbor]:
+                    g_cost[neighbor] = new_g
+                    f_score = new_g + heuristic(neighbor)
+                    heapq.heappush(to_visit, (f_score, new_g, neighbor))  
+                    
+        return False  
+    
+
+
+        # pset = set(pset)
+        # visited = set()
+        # to_visit = []
+        # g_cost = {p1: 0}
+
+        # def heuristic(p):
+        #     return min(abs(p[0] - goal[0]) + abs(p[1] - goal[1]) for goal in pset) if pset else 0
+        # heapq.heappush(to_visit, (heuristic(p1), p1))
+        
+        # while to_visit:
+        #     _, curr = heapq.heappop(to_visit)
+        #     self.mark(curr)
+        #     if curr in pset:
+        #         return True
+        #     if curr in visited:
+        #         continue
+        #     visited.add(curr)
+            
+        #     for neighbor in self.get_neighbors(curr):
+        #         if neighbor in visited:
+        #             continue
+        #         new_g = g_cost[curr] + 1
+        #         if neighbor not in g_cost or new_g < g_cost[neighbor]:
+        #             g_cost[neighbor] = new_g
+        #             f_score = new_g + heuristic(neighbor)
+        #             heapq.heappush(to_visit, (f_score, neighbor))
+        # return False
+
+        
     
     def __repr__(self):
         return str(self.arr)
@@ -96,11 +181,11 @@ class ConnGrid:
             [ 6, 2, 2, 2, 2, 2, 2, 2, 2, 3]]
         )
     
-    def add_wall(self, x, y, r):
-        x += 1
-        y += 1
-        if r == 0:
-            
+    # def add_wall(self, x, y, r):
+    #     x += 1
+    #     y += 1
+    #     if r == 0:
+
             
     #         sub = self.arr[x-1:x+2, y]
     #         # g = np.bitwise_or.reduce(self.arr[x-1:x+2, y], dtype=np.int8)

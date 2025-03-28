@@ -11,16 +11,15 @@ class Gamestate:
         for player_position in self.player_positions:
             self.grid.add_pawn(player_position)     
         self.open_placements = set(self.grid.get_open_wall_moves())
-        self
+        self.goals = self.get_goals()
 
     def __repr__(self):
         return get_display_string_pl(self.grid.arr, self.player_positions, 0)    
     
     def play_wall(self, move):
-        print(len(self.open_placements))
-        r = move[2]
         x = move[0]
         y = move[1]
+        r = move[2]
         if self.grid.add_wall(x,y,r):
             print("added wall")
 
@@ -33,6 +32,14 @@ class Gamestate:
                 self.open_placements.discard((x,y2,r))
             self.open_placements.discard((x, y,0))
 
+    def get_goals(self):
+        return [
+        [(i,8) for i in range(9)],
+        [(i,0) for i in range(9)],
+        [(8,i) for i in range(9)],
+        [(0,i) for i in range(9)],
+        ]
+
     def get_legal_moves(self):
         pass
         # self.grid.get_legal_wall_moves()
@@ -41,6 +48,15 @@ class Gamestate:
         
         # self.grid.get_legal_pawn_moves():
 
+    def check_position_legal(self):
+        for i, position in enumerate(self.player_positions):
+            conn = self.grid.are_connected(position, self.goals[i])
+            print(self)
+            self.grid.clear_all
+            if not conn:
+                return False
+        return True
+
     
 
 
@@ -48,7 +64,7 @@ class Gamestate:
     
 if __name__ == "__main__":
     g = Gamestate(
-        [(4,0), (4,8), (6,3), (3,3)]
+        [(4,0), (4,8), (0,4), (8,4)]
         )
     # print(g)
     
@@ -57,11 +73,16 @@ if __name__ == "__main__":
     # g.grid.add_wall(0,0,0)
 
     for i in range(20):
-        print(g)
+        # print(g)
         
         tup = choice(tuple(g.open_placements))
         g.play_wall(tup)
     print(g)
+    # for i in range(5000):
+    #     g.check_position_legal()
+    print(g.check_position_legal())
+    
+    
 
     
     

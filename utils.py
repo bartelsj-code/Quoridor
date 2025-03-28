@@ -73,6 +73,9 @@ def get_display_string_pl(grid, player_positions, orientation=0):
                 if (i, j) in d:
                     sou, nsou = d[(i, j)][0], d[(i, j)][1]
 
+                if q & 128:
+                    sou, nsou = "⨱","×"
+
                 output.append(sou if q & s else nsou)
                 output.append("|" if q & e else " ")
         return "".join(output)
