@@ -7,10 +7,10 @@ import heapq
 # E = 2     # 00000010   eastern...
 # S = 4     # 00000100   southern...
 # W = 8     # 00001000   ...western neighbor
-# H = 16    # 00010000   h wall placement is illegal (blocking a pawn)
-# V = 32    # 00100000   v wall placement is illegal (blocking a pawn)
-# oc = 64   # 01000000   a player pawn (not identified) is occupying this square
-#mark = 128 # 10000000   this square has been marked for some debugging reason
+# H = 16    # 00010000   h wall placement is illegal (blocking a pawn, not physical)
+# V = 32    # 00100000   v wall placement is illegal (blocking a pawn, not physical)
+# oc = 64   # 01000000   a player pawn (who not specified) is occupying this square (for jumping)
+#mark = 128 # 10000000   this square has been marked for some debugging reason and will show up as an "x"
 
 #array is rotated 90 degrees clockwise so that x and y can be input in that order
 
@@ -18,12 +18,24 @@ class SquareGrid:
     def __init__(self):
         self.arr = self.get_empty_grid()
 
+    def is_illegal(self, placment):
+        
+        x, y, r = placment
+        print(self.arr[x,y])
+
+        if r:
+            return self.arr[x, y] & 32
+        return self.arr[x, y] & 16
+
     def mark_illegal(self, placement):
+        
+
         x, y, r = placement
         if r:
             self.arr[x, y] |= 32
         else:
             self.arr[x, y] |= 16
+        self.mark((x,y))
 
     def unmark_illegal(self, placement):
         x, y, r = placement
@@ -31,6 +43,7 @@ class SquareGrid:
             self.arr[x, y] &= ~32
         else:
             self.arr[x, y] &= ~16
+        self.clear((x,y))
 
     def add_wall(self, placement):
         x, y, r = placement
@@ -72,6 +85,11 @@ class SquareGrid:
         x, y =coords
         self.arr[x, y] |= 128
 
+    def is_occupied(self, coord):
+        x,y = coord
+        return self.arr[x,y] & 64
+    
+
     
     def touches_two(self, placement):
         x, y, r = placement
@@ -88,26 +106,6 @@ class SquareGrid:
                 [(x, y, 1), (x+1, y, 1)],
                 [(x, y+1, 1), (x+1, y+1, 1)] + ([(x, y+2, 2)] if y < 7 else [])
             ]
-            # if r == 0:
-        #     check1 = [(x,y,8),(x,y+1,8)]
-        #     if x > 0:
-        #         check1.append((x-1,y,1))
-
-        #     check2 = [(x,y+1,2),(x,y,2)]
-
-        #     check3 = [(x+1,y,2),(x+1,y+1,2)]
-        #     if x < 7:
-        #         check3.append((x+2,y,1))
-            
-        # if r == 1:
-        #     check1 = [(x,y,4),(x+1,y,4)]
-        #     if y > 0:
-        #         check1.append((x,y-1,2))
-        #     check2 = [(x,y,1),(x+1,y,1)]
-        #     check3 = [(x,y+1,1),(x+1,y+1,1)]
-        #     if y < 7:
-        #         check3.append((x,y+2,2))
-
 
         for check in groups:
             for t in check:
@@ -172,11 +170,6 @@ class SquareGrid:
                 if not (cell_value & np.uint8(2)):
                     east_index = grid_index(i+1, j)
                     union(parent, rank, current_index, east_index)
-
-                # self.mark((i,j))
-                # # print(get_display_string_pl(self.arr))
-                # # display_uf(parent, rank)
-                # self.clear((i,j))
         return parent, rank
 
     def set_up_uf(self, placement):
@@ -194,28 +187,28 @@ class SquareGrid:
                 return True
         return False
 
-    def are_connected(self, p1, pset):
-        #does a greedy search from destination set to player location (reverse so that the greedy heuristic can be simpler and more efficient)
-        p1x, p1y = p1
-        open_set = []
-        visited = set()
-        for goal in pset:
-            heapq.heappush(open_set, (abs(goal[0] - p1x) + abs(goal[1] - p1y), goal))
-        while open_set:
-            _, curr = heapq.heappop(open_set)
-            # self.mark(curr)
-            if curr == p1:
-                return True
-            if curr in visited:
-                continue
-            visited.add(curr)
+    # def are_connected(self, p1, pset):
+        # #does a greedy search from destination set to player location (reverse so that the greedy heuristic can be simpler and more efficient)
+        # p1x, p1y = p1
+        # open_set = []
+        # visited = set()
+        # for goal in pset:
+        #     heapq.heappush(open_set, (abs(goal[0] - p1x) + abs(goal[1] - p1y), goal))
+        # while open_set:
+        #     _, curr = heapq.heappop(open_set)
+        #     # self.mark(curr)
+        #     if curr == p1:
+        #         return True
+        #     if curr in visited:
+        #         continue
+        #     visited.add(curr)
 
-            for neighbor in self.get_neighbors(curr):
-                if neighbor in visited:
-                    continue
+        #     for neighbor in self.get_neighbors(curr):
+        #         if neighbor in visited:
+        #             continue
                 
-                heapq.heappush(open_set, (abs(neighbor[0] - p1x) + abs(neighbor[1] - p1y), neighbor))
-        return False
+        #         heapq.heappush(open_set, (abs(neighbor[0] - p1x) + abs(neighbor[1] - p1y), neighbor))
+        # return False
     
     def __repr__(self):
         return str(self.arr)
@@ -230,39 +223,39 @@ class SquareGrid:
 #SA = 64
 #WA = 128  
 
-class ConnGrid:
-    def __init__(self):
-        self.arr = self.get_empty_grid()
+# # class ConnGrid:
+# #     def __init__(self):
+# #         self.arr = self.get_empty_grid()
     
-    def get_empty_grid(self):
-        return np.array([
-            [12, 8, 8, 8, 8, 8, 8, 8, 8, 9],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [ 6, 2, 2, 2, 2, 2, 2, 2, 2, 3]]
-        )
+# #     def get_empty_grid(self):
+# #         return np.array([
+# #             [12, 8, 8, 8, 8, 8, 8, 8, 8, 9],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+# #             [ 6, 2, 2, 2, 2, 2, 2, 2, 2, 3]]
+# #         )
     
-    # def add_wall(self, x, y, r):
-    #     x += 1
-    #     y += 1
-    #     if r == 0:
+# #     # def add_wall(self, x, y, r):
+# #     #     x += 1
+# #     #     y += 1
+# #     #     if r == 0:
 
             
-    #         sub = self.arr[x-1:x+2, y]
-    #         # g = np.bitwise_or.reduce(self.arr[x-1:x+2, y], dtype=np.int8)
-    #         # for x1 in range(x-1,x+2):
-    #         #     self.arr[x1,y] = g
-    #     if r == 1:
-    #         # g = np.bitwise_or.reduce(self.arr[x, y-1:y+2], dtype=np.int8)
-    #         # for y1 in range(y-1,y+2):
-    #         #     self.arr[x,y1] = g
+# #     #         sub = self.arr[x-1:x+2, y]
+# #     #         # g = np.bitwise_or.reduce(self.arr[x-1:x+2, y], dtype=np.int8)
+# #     #         # for x1 in range(x-1,x+2):
+# #     #         #     self.arr[x1,y] = g
+# #     #     if r == 1:
+# #     #         # g = np.bitwise_or.reduce(self.arr[x, y-1:y+2], dtype=np.int8)
+# #     #         # for y1 in range(y-1,y+2):
+# #     #         #     self.arr[x,y1] = g
 
 
 
@@ -270,17 +263,17 @@ class ConnGrid:
         
         
 
-    def __repr__(self):
-        return str(self.arr)
+#     def __repr__(self):
+#         return str(self.arr)
     
 
 
-if __name__ == "__main__":
-    g = ConnGrid()
-    print(g)
-    # g.add_wall(0, 0, 0)
-    # g.add_wall(1,0,1)
-    # g.add_wall(1,2,1)
-    # g.add_wall(2,3,0)
-    # print(g)
+# if __name__ == "__main__":
+#     g = ConnGrid()
+#     print(g)
+#     # g.add_wall(0, 0, 0)
+#     # g.add_wall(1,0,1)
+#     # g.add_wall(1,2,1)
+#     # g.add_wall(2,3,0)
+#     # print(g)
  
