@@ -19,13 +19,28 @@ class Gamestate:
         if len(move) == 3:
             self.play_wall(move)
         else:
-            self.move_pawn(move)
-        # self.player_up = (self.player_up + 1) % len(self.player_positions)
+            self.play_pawn(move)
+        self.player_up = (self.player_up + 1) % len(self.player_positions)
 
     def play_wall(self, move):
         self.grid.add_wall(move)
         self.remove_physicals(move)
         self.remove_illegals(move)
+
+    def play_pawn(self, move):
+        start_coords = self.player_positions[self.player_up]
+        print(self.grid)
+        self.grid.remove_pawn(start_coords)
+        self.grid.add_pawn(move)
+        self.player_positions[self.player_up] = move
+        print(self.grid)
+        print("hi")
+
+
+        
+
+        pass
+
 
     def get_wall_neighbors(self, seg):
         x, y, r = seg
@@ -47,7 +62,6 @@ class Gamestate:
             for nx, ny, nr in candidates
             if 0 <= nx < 9 and 0 <= ny < 9
     ]
-    
     
     def get_adjacent_placements(self, move):
      
@@ -115,9 +129,7 @@ class Gamestate:
                     illegals.append(placement)
         return illegals
 
-    def move_pawn(self, move):
-        pass
-
+    
     def get_start_placements(self):
         return {(x, y, r) for r in range(2) for x in range(8) for y in range(8)}
 
@@ -148,13 +160,13 @@ class Gamestate:
         [(0,i) for i in range(9)],
         ]
     
-    def check_position_legal(self):
+    # def check_position_legal(self):
 
-        for i, position in enumerate(self.player_positions):
-            conn = self.grid.are_connected(position, self.goals[i])
-            if not conn:
-                return False
-        return True
+    #     for i, position in enumerate(self.player_positions):
+    #         conn = self.grid.are_connected(position, self.goals[i])
+    #         if not conn:
+    #             return False
+    #     return True
 
     
 
@@ -167,7 +179,7 @@ if __name__ == "__main__":
     #     )
     # # print(g)
 
-    for r in range(50):
+    for r in range(1):
 
         
         g = Gamestate(
@@ -176,10 +188,10 @@ if __name__ == "__main__":
         for i in range(20):
             tup = choice(tuple(g.open_placements))
             g.play_move(tup)
-            # if not g.check_position_legal():
-            #     print("fail!!!!!!!!")
-            #     print(g)
+
         print(g)
+        print(g)
+
     #     # for i in range(1):
     #     #     # print(g)
             

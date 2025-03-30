@@ -151,7 +151,7 @@ class SquareGrid:
     def get_neighbors(self, p):
         x, y = p
         barriers = (1, 2, 4, 8)
-        cell_value = self.arr[x, y]  # Avoid multiple lookups
+        cell_value = self.arr[x, y]  
         
         return [
             (nx, ny) for i, (dx, dy) in enumerate([(0, 1), (1, 0), (0, -1), (-1, 0)])
