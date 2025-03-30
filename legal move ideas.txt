@@ -5,17 +5,23 @@ illegal_placements will be stored in such a way that pawn moves or a dictionary
 
 During play:
 When a wall is placed: 
-    1. Intersecting wall placements are removed from the set.
+    1. wall is placed,
+    2. Intersecting wall placements are removed from the set.
     
-    2. Placements that become illegal (but remain physically possible) are removed from the set and set aside:
-        2.1 Placements are narrowed down to just the likely illegal ones:
-            Placements that are illegal will... (illegality --> attribute):
+    3. Placements that become illegal (but remain physically possible) are removed from the set and set aside:
+        3.1 Placements are narrowed down to just the likely illegal ones:
+            Placements that are illegal will (illegality --> attribute):
                 - either connect two existing walls, or an existing wall with an edge.
+                    -to check this, existing table is sufficient (using some extra conditionals)
                 - either be adjacent to the wall that was most recently placed or a wall that is directly or indirectly connected to it (not including edges).
+                    -existing table sufficient?
                 - close off an area(s) from the rest of the board?
                 - 
+            3.1.1 Make a list of all open placements that connect to this most recent wall (dir or indir)
+            3.1.2 for each one, check if touches other walls on at least two of its corners.
+            
 
-        2.2 Then, candidates are checked for illegality.
+        3.2 Then, candidates are checked for illegality.
             Attributes that make a placement illegal (attribute --> illegality)
                 - For one or more of the players:
                     - There exists no path from their pawn to any of their goal squares that does not cross a wall

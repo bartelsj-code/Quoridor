@@ -1,15 +1,16 @@
 import numpy as np
 from utils import get_display_string, get_display_string_pl
+from union_find import init_union_find, find, union, grid_index, display_uf
 import heapq
 
 # N = 1     # 00000001   a wall is disconnecting me from northern..
 # E = 2     # 00000010   eastern...
 # S = 4     # 00000100   southern...
 # W = 8     # 00001000   ...western neighbor
-# H = 16    # 00010000   a horizontal wall cannot be added that is centered at the top right corner of this square
-# V = 32    # 00100000   a vertical wall cannot be added that is centered at the top right corner of this square
+# H = 16    # 00010000   h wall placement is illegal (blocking a pawn)
+# V = 32    # 00100000   v wall placement is illegal (blocking a pawn)
 # oc = 64   # 01000000   a player pawn (not identified) is occupying this square
-# mark = 128 #10000000   this square has been marked for some debugging reason
+#mark = 128 # 10000000   this square has been marked for some debugging reason
 
 #array is rotated 90 degrees clockwise so that x and y can be input in that order
 
@@ -17,44 +18,108 @@ class SquareGrid:
     def __init__(self):
         self.arr = self.get_empty_grid()
 
-    def add_wall(self, x, y, r):
-        if r == 0:
-            if self.arr[x, y] & 16:
-                return False
-            self.arr[x, y] |= 49 # 1 + 16 + 32 
-            self.arr[x+1, y] |= 17 # 1 + 16
-            self.arr[x+1, y+1] |= 4 
-            self.arr[x, y+1] |= 4
-            if x > 0:
-                self.arr[x-1, y]  |= 16
+    def mark_illegal(self, placement):
+        x, y, r = placement
+        if r:
+            self.arr[x, y] |= 32
         else:
-            if self.arr[x, y] & 32:
-                return False
-            self.arr[x, y] |= 50 # 2 + 16 + 32
+            self.arr[x, y] |= 16
+
+    def unmark_illegal(self, placement):
+        x, y, r = placement
+        if r:
+            self.arr[x, y] &= ~32
+        else:
+            self.arr[x, y] &= ~16
+
+    def add_wall(self, placement):
+        x, y, r = placement
+        if r:
+            self.arr[x, y] |= 2
             self.arr[x+1, y] |= 8 
             self.arr[x+1, y+1] |= 8 
-            self.arr[x, y+1] |= 34 # 2 + 32
-            if y > 0:
-                self.arr[x, y-1] |= 32
-        return True
+            self.arr[x, y+1] |= 2
+        else:
+            self.arr[x, y] |= 1
+            self.arr[x+1, y] |= 1
+            self.arr[x+1, y+1] |= 4 
+            self.arr[x, y+1] |= 4
+        
+
+    def remove_wall(self, placement):
+        x, y, r = placement
+        if r == 0:
+            self.arr[x, y]     &= ~1
+            self.arr[x+1, y]   &= ~1
+            self.arr[x+1, y+1] &= ~4
+            self.arr[x, y+1]   &= ~4
+        else:
+            self.arr[x, y]     &= ~2
+            self.arr[x+1, y]   &= ~8
+            self.arr[x+1, y+1] &= ~8
+            self.arr[x, y+1]   &= ~2
+
+    def has_wall(self, x, y, face):
+        return self.arr[x, y] & face
+    
+    def remove_pawn(self, coords):
+        self.arr[coords[0], coords[1]] &= ~64
 
     def add_pawn(self, coords):
-        self.arr[coords[0], coords[1]] += 64
-
-    def get_open_wall_moves(self):
-        legal_moves = []
-        for x in range(8):
-            for y in range(8):
-                num = self.arr[x, y]
-                if not num & 16:
-                    legal_moves.append((x, y, 0))
-                if not num & 32:
-                    legal_moves.append((x, y, 1))
-        return legal_moves
+        self.arr[coords[0], coords[1]] |= 64
     
     def mark(self,coords):
         x, y =coords
         self.arr[x, y] |= 128
+
+    
+    def touches_two(self, placement):
+        x, y, r = placement
+        touches = 0
+        if r == 0:
+            groups = [
+                [(x, y, 8), (x, y+1, 8)] + ([(x-1, y, 1)] if x > 0 else []),
+                [(x, y+1, 2), (x, y, 2)],
+                [(x+1, y, 2), (x+1, y+1, 2)] + ([(x+2, y, 1)] if x < 7 else [])
+            ]
+        else:
+            groups = [
+                [(x, y, 4), (x+1, y, 4)] + ([(x, y-1, 2)] if y > 0 else []),
+                [(x, y, 1), (x+1, y, 1)],
+                [(x, y+1, 1), (x+1, y+1, 1)] + ([(x, y+2, 2)] if y < 7 else [])
+            ]
+            # if r == 0:
+        #     check1 = [(x,y,8),(x,y+1,8)]
+        #     if x > 0:
+        #         check1.append((x-1,y,1))
+
+        #     check2 = [(x,y+1,2),(x,y,2)]
+
+        #     check3 = [(x+1,y,2),(x+1,y+1,2)]
+        #     if x < 7:
+        #         check3.append((x+2,y,1))
+            
+        # if r == 1:
+        #     check1 = [(x,y,4),(x+1,y,4)]
+        #     if y > 0:
+        #         check1.append((x,y-1,2))
+        #     check2 = [(x,y,1),(x+1,y,1)]
+        #     check3 = [(x,y+1,1),(x+1,y+1,1)]
+        #     if y < 7:
+        #         check3.append((x,y+2,2))
+
+
+        for check in groups:
+            for t in check:
+                if self.has_wall(t[0], t[1], t[2]):
+                    touches += 1
+                    break
+            if touches == 2:
+                return True
+        return False
+
+            
+
 
     def clear(self, coords):
         x, y =coords
@@ -63,6 +128,11 @@ class SquareGrid:
     def clear_all(self):
         self.arr &= 127
 
+    def get_blocked_pairs(self, placement):
+        x, y, r = placement
+        if r:
+            return [((x, y), (x+1, y)), ((x, y+1), (x+1, y+1))]
+        return [((x, y), (x, y+1)), ((x+1, y), (x+1, y+1))]
 
     def get_empty_grid(self):
         return np.array(
@@ -88,66 +158,64 @@ class SquareGrid:
             if 0 <= (nx := x + dx) < 9 and 0 <= (ny := y + dy) < 9 and not (cell_value & barriers[i])
         ]
     
+    def build_connectivity(self):
+        parent, rank = init_union_find(81)
+        # print(parent, rank)
+        for i in range(9):
+            for j in range(9):
+                current_index = grid_index(i, j)
+                cell_value = self.arr[i, j]
+                if not (cell_value & np.uint8(1)):
+                    north_index = grid_index(i, j+1)
+                    union(parent, rank, current_index, north_index)
+
+                if not (cell_value & np.uint8(2)):
+                    east_index = grid_index(i+1, j)
+                    union(parent, rank, current_index, east_index)
+
+                # self.mark((i,j))
+                # # print(get_display_string_pl(self.arr))
+                # # display_uf(parent, rank)
+                # self.clear((i,j))
+        return parent, rank
+
+    def set_up_uf(self, placement):
+        self.add_wall(placement)
+        self.parent, self.rank= self.build_connectivity()
+        self.remove_wall(placement)
+        
+    def coords_connected_uf(self, p1, p2):
+        return find(self.parent,grid_index(p1[0],p1[1])) == find(self.parent,grid_index(p2[0],p2[1]))
+        
+    def connected_to_goal(self, p1, pset):
+        player_root = find(self.parent,grid_index(p1[0],p1[1]))
+        for square in pset:
+            if find(self.parent,grid_index(square[0],square[1])) == player_root:
+                return True
+        return False
+
     def are_connected(self, p1, pset):
-        
-        pset = set(pset)
-        to_visit = []  
-        g_cost = {p1: 0} 
-        
-        
-        def heuristic(p):
-            return min(abs(p[0] - goal[0]) + abs(p[1] - goal[1]) for goal in pset)
-        
-        heapq.heappush(to_visit, (heuristic(p1), 0, p1)) 
-        
-        while to_visit:
-            _, g, curr = heapq.heappop(to_visit)
-            
-            self.mark(curr) 
-            
-            if curr in pset:
-                return True 
-            
+        #does a greedy search from destination set to player location (reverse so that the greedy heuristic can be simpler and more efficient)
+        p1x, p1y = p1
+        open_set = []
+        visited = set()
+        for goal in pset:
+            heapq.heappush(open_set, (abs(goal[0] - p1x) + abs(goal[1] - p1y), goal))
+        while open_set:
+            _, curr = heapq.heappop(open_set)
+            # self.mark(curr)
+            if curr == p1:
+                return True
+            if curr in visited:
+                continue
+            visited.add(curr)
+
             for neighbor in self.get_neighbors(curr):
-                new_g = g + 1 
-                if neighbor not in g_cost or new_g < g_cost[neighbor]:
-                    g_cost[neighbor] = new_g
-                    f_score = new_g + heuristic(neighbor)
-                    heapq.heappush(to_visit, (f_score, new_g, neighbor))  
-                    
-        return False  
-    
-
-
-        # pset = set(pset)
-        # visited = set()
-        # to_visit = []
-        # g_cost = {p1: 0}
-
-        # def heuristic(p):
-        #     return min(abs(p[0] - goal[0]) + abs(p[1] - goal[1]) for goal in pset) if pset else 0
-        # heapq.heappush(to_visit, (heuristic(p1), p1))
-        
-        # while to_visit:
-        #     _, curr = heapq.heappop(to_visit)
-        #     self.mark(curr)
-        #     if curr in pset:
-        #         return True
-        #     if curr in visited:
-        #         continue
-        #     visited.add(curr)
-            
-        #     for neighbor in self.get_neighbors(curr):
-        #         if neighbor in visited:
-        #             continue
-        #         new_g = g_cost[curr] + 1
-        #         if neighbor not in g_cost or new_g < g_cost[neighbor]:
-        #             g_cost[neighbor] = new_g
-        #             f_score = new_g + heuristic(neighbor)
-        #             heapq.heappush(to_visit, (f_score, neighbor))
-        # return False
-
-        
+                if neighbor in visited:
+                    continue
+                
+                heapq.heappush(open_set, (abs(neighbor[0] - p1x) + abs(neighbor[1] - p1y), neighbor))
+        return False
     
     def __repr__(self):
         return str(self.arr)

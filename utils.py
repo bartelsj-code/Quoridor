@@ -31,7 +31,7 @@ def get_display_string(grid, orientation=0):
         return "".join(output)
 
 
-def get_display_string_pl(grid, player_positions, orientation=0):
+def get_display_string_pl(grid, player_positions = [], orientation=0):
         or_pos = []
         symbs = [("߸","•"), ("⍛","○"), ("⍙","∆"), ("⍚","◇"),]
 
