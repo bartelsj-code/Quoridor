@@ -18,6 +18,7 @@ class Gamestate:
         self.goals = self.get_goals()
         self.wall_count = total_walls
         self.walls_remain = True
+        self.winner = None
 
     def get_clone(self):
         clone = Gamestate()
@@ -30,6 +31,7 @@ class Gamestate:
         clone.goals = clone.get_goals()
         clone.wall_count = sum(clone.player_walls)
         clone.walls_remain = self.walls_remain
+        clone.winner = self.winner
         return clone
 
     def skip_turn(self):

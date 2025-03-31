@@ -8,8 +8,8 @@ class Game:
         self.players = [
             Bot(),
             Player(),
-            Player(),
-            Player(),
+            # Player(),
+            # Player(),
         ] 
         self.board = Board(len(self.players))
 
