@@ -15,13 +15,17 @@ import heapq
 #array is rotated 90 degrees clockwise so that x and y can be input in that order
 
 class SquareGrid:
-    def __init__(self):
+    def get_clone(self):
+        clone = SquareGrid()
+        clone.arr = np.copy(self.arr)
+        return clone
+    
+    def set_up_from_start(self):
         self.arr = self.get_empty_grid()
 
     def is_illegal(self, placment):
         
         x, y, r = placment
-        print(self.arr[x,y])
 
         if r:
             return self.arr[x, y] & 32
@@ -35,7 +39,7 @@ class SquareGrid:
             self.arr[x, y] |= 32
         else:
             self.arr[x, y] |= 16
-        self.mark((x,y))
+        # self.mark((x,y))
 
     def unmark_illegal(self, placement):
         x, y, r = placement
@@ -43,7 +47,7 @@ class SquareGrid:
             self.arr[x, y] &= ~32
         else:
             self.arr[x, y] &= ~16
-        self.clear((x,y))
+        # self.clear((x,y))
 
     def add_wall(self, placement):
         x, y, r = placement

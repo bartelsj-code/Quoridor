@@ -5,14 +5,32 @@ from random import choice
 from time import perf_counter as perf
 
 class Gamestate:
-    def __init__(self, player_positions = []):
+    def set_up_as_start(self, player_count, total_walls = 20):
+        self.over = False
         self.player_up = 0
-        self.player_positions = player_positions
+        self.player_positions = [(4,0), (4,8), (0,4), (8,4)][:player_count]
+        self.player_walls = [total_walls//player_count]*player_count
         self.grid = SquareGrid()
+        self.grid.set_up_from_start()
         for player_position in self.player_positions:
-            self.grid.add_pawn(player_position)     
+            self.grid.add_pawn(player_position)
         self.open_placements = self.get_start_placements()
         self.goals = self.get_goals()
+        self.wall_count = total_walls
+        self.walls_remain = True
+
+    def get_clone(self):
+        clone = Gamestate()
+        clone.over = self.over
+        clone.player_up = self.player_up
+        clone.player_positions = self.player_positions[:]
+        clone.player_walls = self.player_walls[:]
+        clone.grid = self.grid.get_clone()
+        clone.open_placements = self.open_placements.copy()
+        clone.goals = clone.get_goals()
+        clone.wall_count = sum(clone.player_walls)
+        clone.walls_remain = self.walls_remain
+        return clone
 
     def skip_turn(self):
         self.player_up = (self.player_up + 1) % len(self.player_positions)
@@ -22,12 +40,30 @@ class Gamestate:
             self.play_wall(move)
         else:
             self.play_pawn(move)
+        if self.has_won(self.player_up):
+            self.over = True
+            self.winner = self.player_up
         self.player_up = (self.player_up + 1) % len(self.player_positions)
 
+    def get_legal_moves(self):
+        return self.get_legal_placements() + self.get_legal_pawn_moves()
+
+    def get_legal_placements(self):
+        if self.player_walls[self.player_up] > 0:
+            return list(self.open_placements)
+        return []
+
     def play_wall(self, move):
+        if move not in self.get_legal_placements():
+            raise Exception(f"Illegal placement {move} requested")
         self.grid.add_wall(move)
         self.remove_physicals(move)
         self.remove_illegals(move)
+        self.player_walls[self.player_up] -= 1
+        if self.walls_remain and self.wall_count == 0:
+            self.open_placements = set()
+            self.walls_remain = False
+
 
     def get_legal_pawn_moves(self):
         start = self.player_positions[self.player_up]
@@ -50,53 +86,55 @@ class Gamestate:
         return options
 
     def play_pawn(self, move):
+        
         if move not in self.get_legal_pawn_moves():
-            raise Exception(f"Illegal pawn move {move} requested")
+            raise Exception(f"Illegal pawn move {move} requested:\n{self}")
         start_coords = self.player_positions[self.player_up]
         move_components = [start_coords, move] if type(move[0]) == int else [start_coords] + list(move)
         # print(self.grid)
         self.grid.remove_pawn(move_components[0])
         self.grid.add_pawn(move_components[-1])
+        
         self.player_positions[self.player_up] = move_components[-1]
+        if self.walls_remain:
+            all_cands = []
+            for i in range(len(move_components)-1):
+                square1, square2 = move_components[i], move_components[i+1]
+                delta = (square2[0] - square1[0], square2[1] - square1[1])
+                x,y = square1
+                candidates = []
+                if delta == (1,0):
+                    #East
+                    if y < 8:
 
-        all_cands = []
-        for i in range(len(move_components)-1):
-            square1, square2 = move_components[i], move_components[i+1]
-            delta = (square2[0] - square1[0], square2[1] - square1[1])
-            x,y = square1
-            candidates = []
-            if delta == (1,0):
-                #East
-                if y < 8:
+                        candidates.append((x, y, 1))
+                    if y > 0:
+                        candidates.append((x, y-1, 1))
+                
+                if delta == (-1,0):
+                    #West
+                    if y < 8:
+                        candidates.append((x-1, y, 1))
+                        
+                    if y > 0:
+                        candidates.append((x-1, y-1, 1))
+                        
+                if delta == (0,1):
+                    #North
+                    if x < 8:
+                        candidates.append((x, y, 0))
+                    if x > 0:
+                        candidates.append((x-1, y, 0))
+                if delta == (0,-1):
+                    #South
+                    if x < 8:
+                        candidates.append((x,y-1,0))
+                    if x > 0:
+                        candidates.append((x-1, y-1, 0))
+                
+                all_cands += candidates
 
-                    candidates.append((x, y, 1))
-                if y > 0:
-                    candidates.append((x, y-1, 1))
-               
-            if delta == (-1,0):
-                #West
-                if y < 8:
-                    candidates.append((x-1, y, 1))
-                    
-                if y > 0:
-                    candidates.append((x-1, y-1, 1))
-                    
-            if delta == (0,1):
-                #North
-                if x < 8:
-                    candidates.append((x, y, 0))
-                if x > 0:
-                    candidates.append((x-1, y, 0))
-            if delta == (0,-1):
-                #South
-                if x < 8:
-                    candidates.append((x,y-1,0))
-                if x > 0:
-                    candidates.append((x-1, y-1, 0))
-            
-            all_cands += candidates
-
-        self.update_illegals(all_cands)
+            self.update_illegals(all_cands)
 
 
     def get_wall_neighbors(self, seg):
@@ -194,7 +232,6 @@ class Gamestate:
                 marked_illegal.append(candidate)
             elif candidate in self.open_placements:
                 marked_legal.append(candidate)
-        print(marked_illegal, marked_legal)
 
         illegals = self.get_illegals(marked_illegal)
         for c in marked_illegal:
@@ -203,18 +240,26 @@ class Gamestate:
                 self.open_placements.add(c)
 
         new_illegals = self.get_illegals(marked_legal)
-        print(f"new illegals {new_illegals}")
+
         for c in marked_legal:
             if c in new_illegals:
                 self.grid.mark_illegal(c)
                 self.open_placements.discard(c)
+
+    def has_won(self, player):
+        t = (8, 0)
+        if player < 2:
+            return self.player_positions[player][1] == t[player%2]
+        return  self.player_positions[player][0] == t[player%2]
+    
+
         
 
     
     def get_start_placements(self):
         return {(x, y, r) for r in range(2) for x in range(8) for y in range(8)}
 
-    def __repr__(self):
+    def __str__(self):
         symbs = ("•","○","∆","◇")
         return get_display_string_pl(self.grid.arr, self.player_positions, 0) + f"player {symbs[self.player_up]}"  
     
@@ -259,135 +304,30 @@ class Gamestate:
 
     
 if __name__ == "__main__":
+    print("running incorrect file")
     # g = Gamestate(
     #     [(4,0), (4,8), (0,4), (8,4)]
     #     )
-    # # print(g)
+    # # # print(g)
 
-    for r in range(1):
-
-        
-        g = Gamestate(
-        [(4,3), (4,2), (4,4), (8,4)]
-        )
-        # for i in range(20):
-        #     tup = choice(tuple(g.open_placements))
-        #     g.play_move(tup)
-
-        # print(g)
-        # print(g.player_up)
-        # move_options = g.get_legal_pawn_moves()
-        # # print(move_options)
-        # move = choice(move_options)
-        # print(f"playing {move}")
-        # g.play_move(move)
-        # print(g)
-
-
+    # for r in range(1):
 
         
-
-
-
-        # print(g)
-        g.play_move((0,4,0))
-        g.play_move((2,4,0))
-        g.play_move((4,4,0))
-        g.play_move((6,4,0))
-        # print(g)
-        # print(g.grid)
-  
-        
-        g.play_move((7,5,0))
-        
-  
-
-        g.play_move((4,5,1))
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-        g.play_move(((4,4), (5,4)))
-        
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-        g.play_move((6,4))
-        
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-        g.play_move((7,4))
-        
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move(((8,4),(8,5)))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((7,5))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((8,5))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((7,5))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((6,5))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((7,5))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((6,5))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-        g.play_move((6,6))
-        g.skip_turn()
-        g.skip_turn()
-        g.skip_turn()
-        print(g)
-
-
-
-
-
-
-  
-        
-        print(g.get_legal_pawn_moves())
-        # g.play_move()
+    #     g = Gamestate(
+    #     [(4,0), (4,8)]
+    #     )
     #     # print(g)
-    #     # print(g.grid)
-    # print(g)
-  
-        
-        
+    #     for i in range(600):
+    #         move_options = g.get_legal_moves()
+    #         tup = choice(move_options)
+    #         # print(tup)
+    #         g.play_move(tup)
+    #         # print(g)
+    #         if g.over:
+    #             print(f"game over after {i} random moves")
+    #             break
+    #     print(g)
+
 
 
         # is_legal = g.check_position_legal()
