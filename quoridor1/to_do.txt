@@ -1,0 +1,28 @@
+These are elements that should be implemented at some point
+
+
+Union find update rather than reset
+
+Check if played placement has an adjacency in the first place (or either half has two)
+
+In tree, when all walls are placed, use shortest distance to target (account for jumps using bishop idea maybe)
+
+
+
+
+We first figure out which placements are suspect, then check them for illegality
+
+test move along each edge
+
+
+Pursue Path Following Approach:
+    For each player:
+        Go to their pawn and find the shortest path to a goal square. Remember path. Mark each (may or may not have to be limited to one direction at a time) border crossed that is not already marked illegal.
+        Go again, this time not crossing anything marked the first time around. Mark again (may fail)
+        Now do a bfs from the goal to the node. any Marked wall you can reach both sides of is legal. If you reach the goal, there are no illegals.
+        If not:
+             any adjacent (to the zone) marked segments must be part of an illegal placement. 
+             (two adjacent ones indicate illegality of only that placement, one indicates that both placements that include it are illegal)
+             Continue BFS out after unmarking the illegal ones. (repeat until you reach player coords)
+
+        

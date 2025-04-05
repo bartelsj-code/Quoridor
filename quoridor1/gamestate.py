@@ -5,7 +5,10 @@ from random import choice
 from time import perf_counter as perf
 
 class Gamestate:
-    def set_up_as_start(self, player_count, total_walls = 20):
+    def __init__(self):
+        self.tots = 0
+        
+    def set_up_as_start(self, player_count, total_walls =20):
         self.over = False
         self.player_up = 0
         self.player_positions = [(4,0), (4,8), (0,4), (8,4)][:player_count]
@@ -62,6 +65,7 @@ class Gamestate:
         self.remove_physicals(move)
         self.remove_illegals(move)
         self.player_walls[self.player_up] -= 1
+        self.wall_count-=1
         if self.walls_remain and self.wall_count == 0:
             self.open_placements = set()
             self.walls_remain = False
@@ -86,7 +90,10 @@ class Gamestate:
             else:
                 options.append(neighbor)
         return options
+    
+    # def early_stop(self):
 
+    
     def play_pawn(self, move):
         
         if move not in self.get_legal_pawn_moves():
@@ -200,24 +207,47 @@ class Gamestate:
                     placements.append(alt_candidate)
                     
         return placements
+    
+    def get_touch_twos(self, candidates):
+        touch_twos = []
+        for placement in candidates:
+            if self.grid.touches_two(placement):
+                touch_twos.append(placement)
+        return touch_twos
+
 
     def get_candidates(self, move):
         placements = self.get_adjacent_placements(move)
-        news = []
-        for placement in placements:
-            if self.grid.touches_two(placement):
-                news.append(placement)
-
-        return news
+        placements = self.get_touch_twos(placements)
+        
+        # print(len(placements))
+        # print(self.tots)
+        self.tots += len(placements)
+        # if n := len(placements) > 30:
+        #     print(move)
+        #     print(self)
+            
+        
+        return placements
     
     def remove_illegals(self, move):
         candidates = self.get_candidates(move)
+        # print(len(candidates))
         illegals = self.get_illegals(candidates)
         for illegal in illegals:
             self.grid.mark_illegal(illegal)
             self.open_placements.discard(illegal)
         
     def get_illegals(self, candidates):
+        # illegals = []
+        # for candidate in candidates:
+        #     self.grid.add_wall(candidate)
+        #     for i, position, in enumerate(self.player_positions):
+        #         if not self.grid.are_connected(position, self.goals[i]):
+        #             illegals.append(candidate)
+        #     self.grid.remove_wall(candidate)
+        # return illegals
+    
         illegals = []
         for placement in candidates:
             self.grid.set_up_uf(placement)
@@ -254,10 +284,30 @@ class Gamestate:
             return self.player_positions[player][1] == t[player%2]
         return  self.player_positions[player][0] == t[player%2]
     
+    def evaluate_early(self):
+        l = -1
+        lowest = float("inf")
+        second = float("inf")
+        for i, coords in enumerate(self.player_positions):
+            goals = self.goals[i]
+            curr = self.grid.get_path_distance(coords, goals)
+            if curr < lowest:
+                second = lowest
+                lowest = curr
+                l = i
+            elif curr < second:
+                second = curr
 
-        
+        if lowest <= second-2:
+            self.winner = l
+            self.over = True
 
-    
+    def get_fastest_move(self):
+        move_candidate = self.grid.astar_first_move(self.player_positions[self.player_up], self.goals[self.player_up])
+        if move_candidate in self.get_legal_pawn_moves():
+            return move_candidate
+        return choice(self.get_legal_pawn_moves())
+
     def get_start_placements(self):
         return {(x, y, r) for r in range(2) for x in range(8) for y in range(8)}
 
@@ -292,53 +342,9 @@ class Gamestate:
         [(0,i) for i in range(9)],
         ]
     
-    # def check_position_legal(self):
-
-    #     for i, position in enumerate(self.player_positions):
-    #         conn = self.grid.are_connected(position, self.goals[i])
-    #         if not conn:
-    #             return False
-    #     return True
-
-    
-
-
 
     
 if __name__ == "__main__":
     print("running incorrect file")
-    # g = Gamestate(
-    #     [(4,0), (4,8), (0,4), (8,4)]
-    #     )
-    # # # print(g)
 
-    # for r in range(1):
-
-        
-    #     g = Gamestate(
-    #     [(4,0), (4,8)]
-    #     )
-    #     # print(g)
-    #     for i in range(600):
-    #         move_options = g.get_legal_moves()
-    #         tup = choice(move_options)
-    #         # print(tup)
-    #         g.play_move(tup)
-    #         # print(g)
-    #         if g.over:
-    #             print(f"game over after {i} random moves")
-    #             break
-    #     print(g)
-
-
-
-        # is_legal = g.check_position_legal()
-
-    # for i in range(5000):
-    #     g.check_position_legal()
-    
-    
-    
-
-    
     

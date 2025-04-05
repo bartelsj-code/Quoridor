@@ -1,13 +1,14 @@
 from board import Board
 from player import Player
-from bot import Bot
+from bot1 import Bot
 
 
 class Game:
     def __init__(self):
         self.players = [
             Bot(),
-            Player(),
+            Bot(),
+            Bot(),
             # Player(),
             # Player(),
         ] 

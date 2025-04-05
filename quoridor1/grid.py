@@ -24,9 +24,7 @@ class SquareGrid:
         self.arr = self.get_empty_grid()
 
     def is_illegal(self, placment):
-        
         x, y, r = placment
-
         if r:
             return self.arr[x, y] & 32
         return self.arr[x, y] & 16
@@ -191,93 +189,129 @@ class SquareGrid:
                 return True
         return False
 
-    # def are_connected(self, p1, pset):
-        # #does a greedy search from destination set to player location (reverse so that the greedy heuristic can be simpler and more efficient)
-        # p1x, p1y = p1
-        # open_set = []
-        # visited = set()
-        # for goal in pset:
-        #     heapq.heappush(open_set, (abs(goal[0] - p1x) + abs(goal[1] - p1y), goal))
-        # while open_set:
-        #     _, curr = heapq.heappop(open_set)
-        #     # self.mark(curr)
-        #     if curr == p1:
-        #         return True
-        #     if curr in visited:
-        #         continue
-        #     visited.add(curr)
+    def are_connected(self, p1, pset):
+        #does a greedy search from destination set to player location (reverse so that the greedy heuristic can be simpler and more efficient)
+        p1x, p1y = p1
+        open_set = []
+        visited = set()
+        for goal in pset:
+            heapq.heappush(open_set, (abs(goal[0] - p1x) + abs(goal[1] - p1y), goal))
+        while open_set:
+            _, curr = heapq.heappop(open_set)
+            # self.mark(curr)
+            if curr == p1:
+                return True
+            if curr in visited:
+                continue
+            visited.add(curr)
 
-        #     for neighbor in self.get_neighbors(curr):
-        #         if neighbor in visited:
-        #             continue
+            for neighbor in self.get_neighbors(curr):
+                if neighbor in visited:
+                    continue
                 
-        #         heapq.heappush(open_set, (abs(neighbor[0] - p1x) + abs(neighbor[1] - p1y), neighbor))
-        # return False
+                heapq.heappush(open_set, (abs(neighbor[0] - p1x) + abs(neighbor[1] - p1y), neighbor))
+        return False
+
+    def get_path_distance(self, target, goals):
+        target_x, target_y = target
+
+        cost_so_far = {}
+        frontier = []
+        
+        for g in goals:
+            cost_so_far[g] = 0
+            h = abs(g[0] - target_x) + abs(g[1] - target_y)
+            heapq.heappush(frontier, (h, g))
+        
+        while frontier:
+            _, current = heapq.heappop(frontier)
+            
+            if current == target:
+                return cost_so_far[current]
+            
+            current_cost = cost_so_far[current]
+            for neighbor in self.get_neighbors(current):
+                new_cost = current_cost + 1
+                if new_cost < cost_so_far.get(neighbor, float('inf')):
+                    cost_so_far[neighbor] = new_cost
+                    h = abs(neighbor[0] - target_x) + abs(neighbor[1] - target_y)
+                    heapq.heappush(frontier, (new_cost + h, neighbor))
+        return None
+    
+    def astar_first_move(self, start, goals):
+
+        if start in goals:
+            return None
+
+        frontier = []
+        visited = set()
+
+
+        for neighbor in self.get_neighbors(start):
+            cost = 1  # Cost from start to neighbor
+            heuristic = min(abs(neighbor[0] - gx) + abs(neighbor[1] - gy) for gx, gy in goals)
+            priority = cost + heuristic
+            heapq.heappush(frontier, (priority, cost, neighbor, neighbor))
+            visited.add(neighbor)
+
+
+        while frontier:
+            priority, cost, current, first_move = heapq.heappop(frontier)
+
+
+            if current in goals:
+                return first_move
+
+            for neighbor in self.get_neighbors(current):
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                new_cost = cost + 1
+                heuristic = min(abs(neighbor[0] - gx) + abs(neighbor[1] - gy) for gx, gy in goals)
+                new_priority = new_cost + heuristic
+                heapq.heappush(frontier, (new_priority, new_cost, neighbor, first_move))
+
+        return None
+    
+    def astar_path(self, start, goals):
+        # If the start is already one of the goals, return a path containing just the start.
+        if start in goals:
+            return [start]
+
+        frontier = []
+        visited = set()
+
+        # Initialize the frontier with each goal.
+        # The heuristic is computed from each goal to the start.
+        for goal in goals:
+            cost = 0  # cost from the goal (source of search) to itself is 0
+            heuristic = abs(goal[0] - start[0]) + abs(goal[1] - start[1])
+            priority = cost + heuristic
+            heapq.heappush(frontier, (priority, cost, goal, [goal]))
+            visited.add(goal)
+
+        # Standard A* loop.
+        while frontier:
+            priority, cost, current, path = heapq.heappop(frontier)
+
+            # If we've reached the start, reverse the path to obtain the route from start to goal.
+            if current == start:
+                return path[::-1]
+
+            for neighbor in self.get_neighbors(current):
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                new_cost = cost + 1
+                heuristic = abs(neighbor[0] - start[0]) + abs(neighbor[1] - start[1])
+                new_priority = new_cost + heuristic
+                new_path = path + [neighbor]
+                heapq.heappush(frontier, (new_priority, new_cost, neighbor, new_path))
+        return None
+    
+
+
     
     def __repr__(self):
         return str(self.arr)
     
-
-#N = 1
-#E = 2
-#S = 4
-#W = 8
-#NA = 16
-#EA = 32
-#SA = 64
-#WA = 128  
-
-# # class ConnGrid:
-# #     def __init__(self):
-# #         self.arr = self.get_empty_grid()
-    
-# #     def get_empty_grid(self):
-# #         return np.array([
-# #             [12, 8, 8, 8, 8, 8, 8, 8, 8, 9],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 4, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# #             [ 6, 2, 2, 2, 2, 2, 2, 2, 2, 3]]
-# #         )
-    
-# #     # def add_wall(self, x, y, r):
-# #     #     x += 1
-# #     #     y += 1
-# #     #     if r == 0:
-
-            
-# #     #         sub = self.arr[x-1:x+2, y]
-# #     #         # g = np.bitwise_or.reduce(self.arr[x-1:x+2, y], dtype=np.int8)
-# #     #         # for x1 in range(x-1,x+2):
-# #     #         #     self.arr[x1,y] = g
-# #     #     if r == 1:
-# #     #         # g = np.bitwise_or.reduce(self.arr[x, y-1:y+2], dtype=np.int8)
-# #     #         # for y1 in range(y-1,y+2):
-# #     #         #     self.arr[x,y1] = g
-
-
-
-            
-        
-        
-
-#     def __repr__(self):
-#         return str(self.arr)
-    
-
-
-# if __name__ == "__main__":
-#     g = ConnGrid()
-#     print(g)
-#     # g.add_wall(0, 0, 0)
-#     # g.add_wall(1,0,1)
-#     # g.add_wall(1,2,1)
-#     # g.add_wall(2,3,0)
-#     # print(g)
- 
