@@ -1,5 +1,6 @@
 import numpy as np
 from utils import get_display_string, get_display_string_pl
+from union_find import *
 import heapq
 
 # N = 1     # 00000001   a wall is disconnecting me from northern..
@@ -21,6 +22,7 @@ class SquareGrid:
     
     def set_up_from_start(self):
         self.arr = self.get_empty_grid()
+
 
     def is_illegal(self, placment):
         x, y, r = placment
@@ -93,30 +95,30 @@ class SquareGrid:
         x,y = coord
         return self.arr[x,y] & 64
     
-    # def touches_two(self, placement):
-    #     x, y, r = placement
-    #     touches = 0
-    #     if r == 0:
-    #         groups = [
-    #             [(x, y, 8), (x, y+1, 8)] + ([(x-1, y, 1)] if x > 0 else []),
-    #             [(x, y+1, 2), (x, y, 2)],
-    #             [(x+1, y, 2), (x+1, y+1, 2)] + ([(x+2, y, 1)] if x < 7 else [])
-    #         ]
-    #     else:
-    #         groups = [
-    #             [(x, y, 4), (x+1, y, 4)] + ([(x, y-1, 2)] if y > 0 else []),
-    #             [(x, y, 1), (x+1, y, 1)],
-    #             [(x, y+1, 1), (x+1, y+1, 1)] + ([(x, y+2, 2)] if y < 7 else [])
-    #         ]
+    def get_touches(self, placement):
+        x, y, r = placement
+        touches = 0
+        if r == 0:
+            groups = [
+                [(x, y, 8), (x, y+1, 8)] + ([(x-1, y, 1)] if x > 0 else []),
+                [(x, y+1, 2), (x, y, 2)],
+                [(x+1, y, 2), (x+1, y+1, 2)] + ([(x+2, y, 1)] if x < 7 else [])
+            ]
+        else:
+            groups = [
+                [(x, y, 4), (x+1, y, 4)] + ([(x, y-1, 2)] if y > 0 else []),
+                [(x, y, 1), (x+1, y, 1)],
+                [(x, y+1, 1), (x+1, y+1, 1)] + ([(x, y+2, 2)] if y < 7 else [])
+            ]
 
-    #     for check in groups:
-    #         for t in check:
-    #             if self.has_wall(t[0], t[1], t[2]):
-    #                 touches += 1
-    #                 break
-    #         if touches == 2:
-    #             return True
-    #     return False
+        for check in groups:
+            for t in check:
+                if self.has_wall(t[0], t[1], t[2]):
+                    touches += 1
+                    break
+            if touches == 2:
+                break
+        return touches
     
     def clear(self, coords):
         x, y =coords
@@ -141,38 +143,41 @@ class SquareGrid:
             if 0 <= (nx := x + dx) < 9 and 0 <= (ny := y + dy) < 9 and not (cell_value & barriers[i])
         ]
     
-    ###########  LEGACY?  ######################
+    ###########  LEGACY? No?  ######################
 
-    # def build_connectivity(self):
-    #     parent, rank = init_union_find(81)
-    #     # print(parent, rank)
-    #     for i in range(9):
-    #         for j in range(9):
-    #             current_index = grid_index(i, j)
-    #             cell_value = self.arr[i, j]
-    #             if not (cell_value & np.uint8(1)):
-    #                 north_index = grid_index(i, j+1)
-    #                 union(parent, rank, current_index, north_index)
+    def build_connectivity(self):
+        parent, rank = init_union_find(81)
+        # print(parent, rank)
+        for i in range(9):
+            for j in range(9):
+                current_index = grid_index(i, j)
+                cell_value = self.arr[i, j]
+                if not (cell_value & np.uint8(1)):
+                    north_index = grid_index(i, j+1)
+                    union(parent, rank, current_index, north_index)
 
-    #             if not (cell_value & np.uint8(2)):
-    #                 east_index = grid_index(i+1, j)
-    #                 union(parent, rank, current_index, east_index)
-    #     return parent, rank
+                if not (cell_value & np.uint8(2)):
+                    east_index = grid_index(i+1, j)
+                    union(parent, rank, current_index, east_index)
+        return parent, rank
 
-    # def set_up_uf(self, placement):
-    #     self.add_wall(placement)
-    #     self.parent, self.rank= self.build_connectivity()
-    #     self.remove_wall(placement)
+    def set_up_uf(self, placement = None):
+        if placement is None:
+            self.parent, self.rank= self.build_connectivity()
+        else:
+            self.add_wall(placement)
+            self.parent, self.rank= self.build_connectivity()
+            self.remove_wall(placement)
+            
+    def coords_connected_uf(self, p1, p2):
+        return find(self.parent,grid_index(p1[0],p1[1])) == find(self.parent,grid_index(p2[0],p2[1]))
         
-    # def coords_connected_uf(self, p1, p2):
-    #     return find(self.parent,grid_index(p1[0],p1[1])) == find(self.parent,grid_index(p2[0],p2[1]))
-        
-    # def connected_to_goal(self, p1, pset):
-    #     player_root = find(self.parent,grid_index(p1[0],p1[1]))
-    #     for square in pset:
-    #         if find(self.parent,grid_index(square[0],square[1])) == player_root:
-    #             return True
-    #     return False
+    def connected_to_goal(self, p1, pset):
+        player_root = find(self.parent,grid_index(p1[0],p1[1]))
+        for square in pset:
+            if find(self.parent,grid_index(square[0],square[1])) == player_root:
+                return True
+        return False
 
     def are_connected_greedy(self, p1, pset):
         #does a greedy search from destination set to player location (reverse so that the greedy heuristic can be simpler and more efficient)
@@ -295,7 +300,18 @@ class SquareGrid:
     def __repr__(self):
         return str(self.arr)
 
-    def get_empty_grid(self):
+    def get_empty_grid(self, size = 9):
+        # arr = np.zeros((size, size), dtype=np.uint8)
+        # for x in range(size):
+        #     arr[x, 0] |= 4
+        #     arr[x, size-1] |= 1
+        # for y in range(size):
+        #     arr[0, y] |= 8
+        #     arr[size-1, y] |= 2
+
+        # return arr
+
+
         return np.array(
                 [
                 [12, 8, 8, 8, 8, 8, 8, 8, 9],

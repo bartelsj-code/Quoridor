@@ -11,4 +11,4 @@ if __name__ == "__main__":
     g.play()
     profiler.disable()  
     stats = pstats.Stats(profiler).sort_stats('cumulative')
-    stats.print_stats(10)
+    stats.print_stats(20)

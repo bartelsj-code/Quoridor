@@ -1,7 +1,12 @@
 from grid import SquareGrid
 import numpy as np
 from utils import *
-from random import choice
+from random import choice, random, seed
+from union_find import find, grid_index
+import cProfile
+import pstats
+
+seed('bagel')
 
 class Gamestate:
     def set_up_as_start(self, player_count, total_walls = 20):
@@ -14,7 +19,7 @@ class Gamestate:
         for player_position in self.player_positions:
             self.grid.add_pawn(player_position)
         self.open_placements = self.get_start_placements()
-        self.goals = self.get_goals()
+        self.goals = self.get_starting_goals()
         self.wall_count = total_walls
         self.winner = None
 
@@ -26,7 +31,7 @@ class Gamestate:
         clone.player_walls = self.player_walls[:]
         clone.grid = self.grid.get_clone()
         clone.open_placements = self.open_placements.copy()
-        clone.goals = clone.get_goals()
+        clone.goals = [goals.copy() for goals in self.goals]
         clone.wall_count = self.wall_count
         clone.winner = self.winner
         return clone
@@ -67,24 +72,25 @@ class Gamestate:
                 options.append(neighbor)
         return options
         
-
     def get_legal_placements(self):
         if self.player_walls[self.player_up] > 0:
             return list(self.open_placements)
         return []
     
     def play_wall(self, move):
-
         if move not in self.get_legal_placements():
-            
             raise Exception(f"Illegal placement {move} requested")
         self.grid.add_wall(move)
         self.player_walls[self.player_up] -= 1
         self.wall_count-=1
-        if self.wall_count == 0:
+        if self.wall_count == 0 :
             self.open_placements = set()
+        # self.update_goals()
         self.remove_physicals(move)
         self.remove_illegals(move)
+        
+
+    
 
     def play_pawn(self, move):
         if move not in self.get_legal_pawn_moves():
@@ -156,478 +162,186 @@ class Gamestate:
             if 0 <= nx < 9 and 0 <= ny < 9
     ]
 
-
-#################  LEGACY?   #################
-    # def get_adjacent_placements(self, move):
-     
-    #     start_x, start_y, start_r = move
-
-    #     to_search = {(start_x, start_y, start_r + 1)}
-    #     searched = set()
-    #     empties = []
-
-
-    #     while to_search:
-    #         current = to_search.pop()
-    #         searched.add(current)
-    #         for neighbor in self.get_wall_neighbors(current):
-    #             if neighbor in searched or neighbor in to_search:
-    #                 continue
-    #             nx, ny, nr = neighbor
-    #             if self.grid.has_wall(nx, ny, nr):
-    #                 to_search.add(neighbor)
-    #             else:
-    #                 empties.append(neighbor)
-
-    #     placements = []
-
-    #     for ex, ey, er in empties:
-    #         new_r = er - 1
-    #         candidate = (ex, ey, new_r)
-    #         if candidate in self.open_placements:
-    #             placements.append(candidate)
+    def get_immediate_placements(self, move):
+        start_x, start_y, start_r = move
+        if start_r == 0:
+            components = ((start_x, start_y, start_r+1), (start_x+1, start_y, start_r+1))
+        if start_r == 1:
+            components = ((start_x, start_y, start_r+1), (start_x, start_y+1, start_r+1))
+        segs = []
+        seen = set()
+        for component in components:
+            for seg in self.get_wall_neighbors(component):
+    
+                x, y, r = seg
+                if not self.grid.has_wall(x, y, r ) and seg not in components:
+                    segs.append(seg)
+        
+        segs = list(set(segs))
+        placements = set()
+        for ex, ey, er in segs:
+            new_r = er - 1
+            candidate = (ex, ey, new_r)
+            if candidate in self.open_placements:
+                placements.add(candidate)
             
 
-    #         if new_r == 0 and ex > 0:
-    #             alt_candidate = (ex - 1, ey, new_r)
-    #             if alt_candidate in self.open_placements:
-    #                 placements.append(alt_candidate)
-    #         elif ey > 0:
-    #             alt_candidate = (ex, ey - 1, new_r)
-    #             if alt_candidate in self.open_placements:
-    #                 placements.append(alt_candidate)
+            if new_r == 0 and ex > 0:
+                alt_candidate = (ex - 1, ey, new_r)
+                if alt_candidate in self.open_placements:
+                    placements.add(alt_candidate)
+            elif ey > 0:
+                alt_candidate = (ex, ey - 1, new_r)
+                if alt_candidate in self.open_placements:
+                    placements.add(alt_candidate)
                     
-    #     return placements
+        return list(placements)
+        # for neighbor in self.get_wall_neighbors((start_x, start_y, start_r + 1)):
+
+
+    def get_connected_placements(self, move):
+
+        start_x, start_y, start_r = move
+
+        to_search = {(start_x, start_y, start_r + 1)}
+        searched = set()
+        empties = []
+
+
+        while to_search:
+            current = to_search.pop()
+            searched.add(current)
+            for neighbor in self.get_wall_neighbors(current):
+                if neighbor in searched or neighbor in to_search:
+                    continue
+                nx, ny, nr = neighbor
+                if self.grid.has_wall(nx, ny, nr):
+                    to_search.add(neighbor)
+                else:
+                    empties.append(neighbor)
+
+
+        empties = list(set(empties))
+
+
+        placements = set()
+
+        for ex, ey, er in empties:
+            new_r = er - 1
+            candidate = (ex, ey, new_r)
+            if candidate in self.open_placements:
+                placements.add(candidate)
+            if new_r == 0 and ex > 0:
+                alt_candidate = (ex - 1, ey, new_r)
+                if alt_candidate in self.open_placements:
+                    placements.add(alt_candidate)
+            elif ey > 0:
+                alt_candidate = (ex, ey - 1, new_r)
+                if alt_candidate in self.open_placements:
+                    placements.add(alt_candidate)
+
+                    
+        return list(placements)
+
     
-    # def get_touch_twos(self, candidates):
-    #     touch_twos = []
-    #     for placement in candidates:
-    #         if self.grid.touches_two(placement):
-    #             touch_twos.append(placement)
-    #     return touch_twos
+    def get_path_overlaps(self):
+        overlaps = set()
+        for i, position in enumerate(self.player_positions):
+            path = self.grid.astar_full_path(position, self.goals[i])
+            for j in range(len(path)-1):
+                a = path[j]
+                b = path[j+1]
+                if a > b:
+                    a, b = b, a
+                ax, ay = a
+                bx, by = b
+                if ax == bx:
+                    for placement in ((ax, ay, 0), (ax-1, ay, 0)):
+                        if placement in self.open_placements:
+                            overlaps.add(placement) 
+                if ay == by:
+                    for placement in ((ax, ay-1, 1), (ax, ay, 1)):
+                        if placement in self.open_placements:
+                            overlaps.add(placement)
+        return overlaps
 
-    # def get_candidates(self, move):
-    #     placements = self.get_adjacent_placements(move)
-    #     placements = self.get_touch_twos(placements)
-    #     return placements
+                
+
+    def narrow_candidates(self, move):
+        touches = self.grid.get_touches(move)
+        if touches == 0:
+            return []
+        elif touches == 1:
+            cands = self.get_immediate_placements(move)
+        else:
+            cands = self.get_connected_placements(move)
+
+
+        overlaps = self.get_path_overlaps()
+        # cands = [cand for cand in cands if cand in overlaps]
     
-    def get_partner(self, single):
-        coords, face = single
-        if face == 1:
-            return ((coords[0], coords[1]+1), 4)
-        if face == 4:
-            return ((coords[0], coords[1]-1), 1)
-        if face == 2:
-            return ((coords[0]+1, coords[1]), 8)
-        if face == 8:
-            return ((coords[0]-1, coords[1]), 2)
-
-    def placements_from_single(self, single):
-
-        coords, face = single
-        if face == 1:
-            return ((coords[0]-1, coords[1], 0), (coords[0],coords[1], 0))
-        if face == 4:
-            return ((coords[0]-1, coords[1]-1, 0), (coords[0],coords[1]-1, 0))
-        if face == 2:
-            return ((coords[0], coords[1], 1), (coords[0],coords[1]-1, 1))
-        if face == 8:
-            return ((coords[0]-1, coords[1], 1), (coords[0]-1,coords[1]-1, 1))
-        return []
-
-    def expand_and_clear_doubles(self, start, goals):
-        seeked = set()
-        goals = set(goals)
-        seeking = set()
-        visited = set()
-        to_do = set()
-        to_do.add(start)
-
-        for i in range(80):
-            while to_do:
-                
-
-                curr = to_do.pop()
-                # self.grid.mark(curr)
-                if curr in goals:
-                    # print(self)
-                    # print("goal_reached")
-     
-                    return
-                
-                
-                lst = self.s_dict.get(curr)
-                if lst is not None:
-                    for single in lst:
-
-                        partner = self.get_partner(single)
-                        if partner in seeking:
-
-                            # self.grid.unblock_single(partner[0], partner[1])
-
-                            # self.grid.unblock_single(single[0], single[1])
-                            seeking.remove(partner)
-                            seeked.add(partner)
-                            seeked.add(single)
-                            # seeking.discard(single)
-                            
-                            pass
-                            # remove wall and both from seeking
-                        else:
-                            
-                            if single not in seeked:
-                                # print(single)
-                                seeking.add(single)
-                
-                            
-        
-                visited.add(curr)
-                
-                
-                
-                neighbors = self.grid.get_neighbors(curr)
-
-                for neighbor in neighbors:
-                    if neighbor not in visited and neighbor not in to_do:
-                        to_do.add(neighbor)
-
-                # print(self)
-                # print(seeking)
-            # print("section done")
-
-            # print(self)
-            # self.grid.clear_all()
-
-            if len(seeking) == 2:
-                # print(self)
-                single = seeking.pop()
-                partner1 = self.get_partner(single)
-                seeked.add(single)
-                seeked.add(partner1)
-                placements1 = self.placements_from_single(single)
-                single2 = seeking.pop()
-                partner2 = self.get_partner(single2)
-
-                seeked.add(single2)
-                seeked.add(partner2)
-
-                placements2 = self.placements_from_single(single2)
-                shared = None
-                for p in placements1:
-                    if p in placements2:
-                        self.finds.add(p)
-                        # print(f"found illegal: {p}")
-                        break
-                to_do.add(partner1[0])
-                to_do.add(partner2[0])
-
-            elif len(seeking) == 1:
-                # raise Exception("Implement")
-                single = seeking.pop()
-                partner = self.get_partner(single)
-                seeked.add(single)
-                seeked.add(partner)
-
-                coords, face = partner
-                to_do.add((coords))
-
-            else:
-                for s in seeking:
-                    self.grid.mark(s[0])
-                print(self)
-                print(seeking)
-                raise Exception(f"seeking had length: {len(seeking)}")
-                single = seeking.pop()
-
-
-        print(self)
-        raise Exception("loop didn't exit")
-
-
-                
-            
-
-
-
-            
-
-
-    def expand_and_clear_singles(self, start, goals):
-        goals = set(goals)
-        seeking = set()
-        visited = set()
-        to_do = set()
-        to_do.add(start)
-        
-        while True:
-            while to_do:
-                
-                # print(self)
-                # print(to_do)
-                curr = to_do.pop()
-                # self.grid.mark(curr)
-                if curr in goals:
-                    # print(self)
-                    # print("goal_reached")
-                    return
-                
-                # print(self)
-                lst = self.s_dict.get(curr)
-                if lst is not None:
-                    for single in lst:
-
-                        partner = self.get_partner(single)
-                        if partner in seeking:
-
-                            # self.grid.unblock_single(partner[0], partner[1])
-
-                            # self.grid.unblock_single(single[0], single[1])
-                            seeking.remove(partner)
-                            
-                            pass
-                            # remove wall and both from seeking
-                        else:
-                            if self.get_partner(single)[0] not in visited:
-                                seeking.add(single)
-                            
-                visited.add(curr)
-                
-                neighbors = self.grid.get_neighbors(curr)
-
-                for neighbor in neighbors:
-                    if neighbor not in visited and neighbor not in to_do:
-                        to_do.add(neighbor)
-
-
-            # print(self)
-            # print("segment done")
-            # self.grid.clear_all()
-
-
-            if len(seeking) == 1:
-                single = seeking.pop()
-                # print(single)
-                
-                # self.grid.mark(single[0])
-                placements = self.placements_from_single(single)
-                for placement in placements:
-                    if placement in self.open_placements:
-                        # print(999,"\n",self, single)
-                        self.finds.add(placement)
-                        # print(f"found illegal: {placement}")
-                        # print(self.finds)
-                self.grid.unblock_single(single[0], single[1])
-                
-
-                coords, face = self.get_partner(single)
-                self.grid.unblock_single(coords, face)
-                        
-                to_do.add((coords))
-            else:
-                for s in seeking:
-                    self.grid.mark(s[0])
-                print(self)
-                raise Exception("singles space")
-                
-
-                # self.grid.clear_all()
-
-
-
-    def record(self, single):
-        self.s_blocks.add(single)
-        coords = single[0]
-        if not coords in self.s_dict:
-            self.s_dict[coords] = []
-        self.s_dict[coords].append(single)
-        # print(self.s_dict)
-        
-
-    def block_h_if_poss(self, a, b):
-        if a[1]>b[1]:
-            a, b, = b, a
-        
-
-        placements = ((a[0]-1, a[1], 0), (a[0], a[1], 0))
-
-
-        if placements[0] in self.open_placements or placements[1] in self.open_placements:
-            
-            self.grid.block_single(a, 1)
-            self.record((a,1))
-            
-            self.grid.block_single(b, 4)
-            self.record((b,4))
-
-    def block_v_if_poss(self, a, b):
-        if a[0]>b[0]:
-            a, b, = b, a
-        
-
-        placements = ((a[0], a[1], 0), (a[0], a[1]-1, 0))
-        if placements[0] in self.open_placements or placements[1] in self.open_placements:
-            
-            self.grid.block_single(a, 2)
-            self.record((a,2))
-            
-            self.grid.block_single(b, 8)
-            self.record((b,8))
-         
-
-    def block_path_verticals(self, path):
-        for i in range(len(path)-1):
-            a = path[i]
-            b = path[i+1]
-            if a[1] == b[1]:
-
-                self.block_v_if_poss(a, b)
-        
-    def block_path_horizontals(self, path):
-        
-        for i in range(len(path)-1):
-            a = path[i]
-            b = path[i+1]
-            if a[0] == b[0]:
-                self.block_h_if_poss(a, b)
-
-    def mark_path(self, path):
-        for square in path:
-            self.grid.mark(square)
-
-                
-
-    def find_blockers(self, start, goals):
-
-        self.s_dict = {}
-        # print("shortest general path")
-        shortest_path = self.grid.astar_full_path(start, goals)
-        if shortest_path == None:
-            print(self)
-            raise Exception("Illegal Position")
-        
-        # print("STARTING HORIZONTAL")
-        # self.mark_path(shortest_path)
-        # print(self)
-        #Horizontal Portion
-        # print("marking all horizontal segments used")
-        self.block_path_horizontals(shortest_path)
-        # print(self)
-        # self.grid.clear_all()
-        
-        path = self.grid.astar_full_path(start, goals)
+        cands = [cand for cand in cands if cand in overlaps
+                 and not self.grid.is_illegal(cand)
+                 and self.grid.get_touches(cand) == 2]
         
         
-        
-        # # print(path)
-        if path == None:
-            # print("2nd path was not found for horizontal")
-        # #     pass
-            self.expand_and_clear_singles(start, goals)
-            # self.grid.clear_all()
-            
-            # print("New second path:")
-            path = self.grid.astar_full_path(start, goals)
-            
-            
 
-        # ######################################3
-        # else:
-        #     print("2nd path WAS good")
-        # self.mark_path(path)
-        # print(self)
-
-        if path == None:
-            print(self)
-            raise Exception("path was none")
-        self.block_path_horizontals(path)
-        # print("second path blocked")
-        # print(self)
-        # self.grid.clear_all()
-
-        # print("expand and clear doubles")
-        self.expand_and_clear_doubles(start, goals) 
-        # ################################################
-        
-        while self.s_blocks:
-            coords, face = self.s_blocks.pop()
-            self.grid.unblock_single(coords, face)
-        self.grid.clear_all()
-
-        # print("STARTING VERTICALS")
-        # self.mark_path(shortest_path)
-        # print(self)
-        
-
-        # vertical portion
-
-        # print("blocking all vertical used connections")
-        self.block_path_verticals(shortest_path)
-        # print(self)
-        # self.grid.clear_all()
-
-        path = self.grid.astar_full_path(start, goals)
-
-        if path == None:
-            # print("2nd path was not found for vertical")
-            self.expand_and_clear_singles(start, goals)
-
-            # self.grid.clear_all()
-            path = self.grid.astar_full_path(start, goals)
-            # print("new 2nd path")
-        # else:
-        #     print("2nd path was good")
-        # self.mark_path(path)
-        # print(self)
-
-
-        self.block_path_verticals(path)
-        # print("blocked verticals roudn 2")
-        # print(self)
-
-        # self.grid.clear_all()
-        self.expand_and_clear_doubles(start, goals)
-
-
-        while self.s_blocks:
-            coords, face = self.s_blocks.pop()
-            self.grid.unblock_single(coords, face)
-
-        self.grid.clear_all()
-        # print("reset:")
-        # print(self)
+       
 
         
-    
-
-        
+        return cands
+      
     
     
 
     def remove_illegals(self, move):
-        self.s_blocks = set()
-        self.finds = set()
-        
-        illegals = []
-        for i, start in enumerate(self.player_positions):
-
-            # print(f"player {i}")
-            self.find_blockers(start, self.goals[i])
+        candidates = self.narrow_candidates(move)
+        illegals = self.get_illegals_greedy(candidates)
+        self.grid.add_wall(move)
+        # print(self.open_placements)
+        for illegal in illegals:
             
-        print(self.finds)
-        for placement in self.finds:
-            self.open_placements.discard(placement)
-            self.grid.mark_illegal(placement)
-        
+            self.open_placements.remove(illegal)
+            self.grid.mark_illegal(illegal)
 
-    def get_illegals(self, candidates):
+    def get_illegals_uf(self, candidates):
         illegals = []
-        for candidate in candidates:
-            self.grid.add_wall(candidate)
+        for placement in candidates:
+            self.grid.set_up_uf(placement)
             for i, position, in enumerate(self.player_positions):
-                if not self.grid.are_connected_greedy(position, self.goals[i]):
-                    illegals.append(candidate)
-            self.grid.remove_wall(candidate)
+                if not self.grid.connected_to_goal(position, self.goals[i]):
+                    illegals.append(placement)
+                    break
         return illegals
+
+    def get_illegals_greedy(self, candidates, single_player = False):
+        illegals = []
+        if single_player:
+            for candidate in candidates:
+                self.grid.add_wall(candidate)
+                position = self.player_positions[self.player_up]
+                goals = self.goals[self.player_up]
+                if not self.grid.are_connected_greedy(position, goals):
+                    illegals.append(candidate)
+                self.grid.remove_wall(candidate)
+            return illegals
+        else:
+            for candidate in candidates:
+                self.grid.add_wall(candidate)
+                for i, position, in enumerate(self.player_positions):
+                    if not self.grid.are_connected_greedy(position, self.goals[i]):
+                        illegals.append(candidate)
+                        break
+                self.grid.remove_wall(candidate)
+            return illegals
+
+    def update_goals(self):
+        self.grid.set_up_uf()
+        for i, position in enumerate(self.player_positions):
+            r = find(self.grid.parent, grid_index(position[0], position[1]))
+            self.goals[i] = {spot for spot in self.goals[i] if find(self.grid.parent, grid_index(spot[0], spot[1])) == r}
+        # print([len(g) for g in self.goals])
+        pass
     
     def update_illegals(self, candidates):
         marked_illegal = []
@@ -638,19 +352,17 @@ class Gamestate:
             elif candidate in self.open_placements:
                 marked_legal.append(candidate)
 
-        illegals = self.get_illegals(marked_illegal)
+        illegals = self.get_illegals_greedy(marked_illegal)
         for c in marked_illegal:
             if c not in illegals:
                 self.grid.unmark_illegal(c)
-                self.finds.discard(c)
                 self.open_placements.add(c)
 
-        new_illegals = self.get_illegals(marked_legal)
+        new_illegals = self.get_illegals_greedy(marked_legal)
 
         for c in marked_legal:
             if c in new_illegals:
                 self.grid.mark_illegal(c)
-                self.finds.add(c)
                 self.open_placements.discard(c)
 
     def has_won(self, player):
@@ -659,13 +371,20 @@ class Gamestate:
             return self.player_positions[player][1] == t[player%2]
         return  self.player_positions[player][0] == t[player%2]
 
-    def evaluate_early(self, degree = 2):
+    def try_early_eval(self):
+        if self.wall_count == 0:
+            self.evaluate_early()
+
+    
+
+    def evaluate_early(self):
+        degree = 2#len(self.player_positions)
         l = -1
         lowest = float("inf")
         second = float("inf")
         for i, coords in enumerate(self.player_positions):
             goals = self.goals[i]
-            curr = self.grid.get_path_distance(coords, goals)
+            curr = self.grid.astar_distance(coords, goals)
             if curr < lowest:
                 second = lowest
                 lowest = curr
@@ -675,7 +394,18 @@ class Gamestate:
 
         if lowest <= second-degree:
             self.winner = l
+            # print("cut off early")
             self.over = True
+
+    def get_move_weighted(self, weighting):
+        if self.player_walls[self.player_up] > 0 :
+            if random() > weighting:
+                try:
+                    return choice(list(self.open_placements))
+                except:
+                    self.wall_count = 0
+        return choice(self.get_legal_pawn_moves())
+
 
     def get_fastest_move(self):
         move_candidate = self.grid.astar_first_move(self.player_positions[self.player_up], self.goals[self.player_up])
@@ -683,13 +413,21 @@ class Gamestate:
             return move_candidate
         return choice(self.get_legal_pawn_moves())
     
+    def get_rollout_move(self, weight):
+        if self.player_walls[self.player_up] > 0:
+            move = self.get_move_weighted(weight)
+        else:
+            move = g.get_fastest_move()
+        return move
+        
+    
     def get_start_placements(self):
         return {(x, y, r) for r in range(2) for x in range(8) for y in range(8)}
 
 
     def __str__(self):
         symbs = ("•","○","∆","◇")
-        return get_display_string_pl(self.grid.arr, self.player_positions, 0) + f"player {symbs[self.player_up]}"  
+        return get_display_string_pl(self.grid.arr, self.player_positions, 0) + f"player {symbs[self.player_up]} Winner: {symbs[self.winner]}"  
     
     def remove_physicals(self, move):
         x, y, r = move
@@ -710,27 +448,40 @@ class Gamestate:
             self.open_placements.discard((x, y, 1 - r))
             self.grid.unmark_illegal((x, y, 1 - r))
 
-    def get_goals(self):
+    def get_starting_goals(self):
         return [
-        [(i,8) for i in range(9)],
-        [(i,0) for i in range(9)],
-        [(8,i) for i in range(9)],
-        [(0,i) for i in range(9)],
-        ]
+        set([(i,8) for i in range(9)]),
+        set([(i,0) for i in range(9)]),
+        set([(8,i) for i in range(9)]),
+        set([(0,i) for i in range(9)]),
+        ][:len(self.player_positions)]
+    
+    
     
         
 if __name__ == "__main__":
+    profiler = cProfile.Profile()
+    profiler.enable()  
     
-    for i in range(50):
+    for i in range(1000):
         g = Gamestate()
         g.set_up_as_start(2)
-        print(g)    
+        # print(g)    
+        j = 0
         while not g.over:
-            options = g.get_legal_moves()
-            move = choice(options)
-            print(move)
+            move = g.get_rollout_move(0.3)
+            # print(move)
+            # print(move)
             g.play_move(move)
-            print(g)
+
+            g.try_early_eval()
+            j += 1
+            
+            # print(g)
+
+    profiler.disable()  
+    stats = pstats.Stats(profiler).sort_stats('cumulative')
+    stats.print_stats(5)
 
     # g.play_move((0,5,0))
     
