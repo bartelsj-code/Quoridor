@@ -1,0 +1,9 @@
+Possible approach to path caching:
+
+Paths need to be initialized at start.
+
+if a player moves their pawn along the path, the path just becomes shorter. If a player moves their pawn in a different way only their path needs to be reevaluated.
+
+If a wall is placed any path intersected by that wall needs to be reevaluated.
+
+shortest move should just be first part of path
