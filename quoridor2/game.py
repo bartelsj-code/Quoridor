@@ -7,10 +7,10 @@ class Game:
     def __init__(self):
         self.players = [
             Bot(),
-            # Bot(),
+            Bot(),
             # Bot(),
             # Player(),
-            Player(),
+            # Player(),
         ] 
         self.board = Board(len(self.players))
 

@@ -24,6 +24,7 @@ class Gamestate:
         self.wall_count = total_walls
         self.paths = [self.grid.astar_full_path(self.player_positions[i], self.goals[i]) for i in range(self.player_count)]
         self.blockers = [self.get_blockers(self.paths[i]) for i in range(self.player_count)]
+        
         self.winner = None
 
     def get_clone(self):
@@ -38,7 +39,8 @@ class Gamestate:
         clone.goals = [goals.copy() for goals in self.goals]
         clone.wall_count = self.wall_count
         clone.winner = self.winner
-        clone.paths = self.paths
+        clone.paths = [path.copy() for path in self.paths]
+        clone.blockers = [blockers.copy() for blockers in self.blockers]
         
         return clone
     
@@ -89,11 +91,44 @@ class Gamestate:
         self.grid.add_wall(move)
         self.player_walls[self.player_up] -= 1
         self.wall_count-=1
+        self.update_paths_after_placement(move)
         if self.wall_count == 0 :
             self.open_placements = set()
-        # self.update_paths_after_placement(move)
-        self.remove_physicals(move)
-        self.remove_illegals(move)
+        else:
+            self.remove_physicals(move)
+            self.remove_illegals(move)
+
+    def show_path(self, path):
+        for square in path:
+            self.grid.mark(square)
+        print(self)
+        self.grid.clear_all()
+
+    def update_path(self, player):
+        # self.show_path(self.paths[player])
+        self.paths[player] = self.grid.astar_full_path(self.player_positions[player], self.goals[player])
+        # self.show_path(self.paths[player])
+
+    def update_paths_after_placement(self, move):
+        for i in range(self.player_count):
+            blockers = self.blockers[i]
+            if move in blockers:
+                self.update_path(i)
+                self.blockers[i] = self.get_blockers(self.paths[i])
+
+    def update_paths_after_pawn(self, move):
+        if self.paths[self.player_up][1] == self.player_positions[self.player_up]:
+       
+            for blocker in self.get_blockers(self.paths[self.player_up][:2]):
+                self.blockers[self.player_up].discard(blocker)
+            self.paths[self.player_up] = self.paths[self.player_up][1:]
+        else:
+            path = self.grid.astar_full_path(self.player_positions[self.player_up], self.goals[self.player_up])
+            self.paths[self.player_up] = path
+            self.blockers[self.player_up] = self.get_blockers(path)
+
+    
+        # print(self)
         
     def play_pawn(self, move):
         if move not in self.get_legal_pawn_moves():
@@ -103,46 +138,12 @@ class Gamestate:
         # print(self.grid)
         self.grid.remove_pawn(move_components[0])
         self.grid.add_pawn(move_components[-1])
-        
         self.player_positions[self.player_up] = move_components[-1]
-        if self.wall_count > 0:
-            all_cands = []
-            for i in range(len(move_components)-1):
-                square1, square2 = move_components[i], move_components[i+1]
-                delta = (square2[0] - square1[0], square2[1] - square1[1])
-                x,y = square1
-                candidates = []
-                if delta == (1,0):
-                    #East
-                    if y < 8:
 
-                        candidates.append((x, y, 1))
-                    if y > 0:
-                        candidates.append((x, y-1, 1))
-                
-                if delta == (-1,0):
-                    #West
-                    if y < 8:
-                        candidates.append((x-1, y, 1))
-                        
-                    if y > 0:
-                        candidates.append((x-1, y-1, 1))
-                        
-                if delta == (0,1):
-                    #North
-                    if x < 8:
-                        candidates.append((x, y, 0))
-                    if x > 0:
-                        candidates.append((x-1, y, 0))
-                if delta == (0,-1):
-                    #South
-                    if x < 8:
-                        candidates.append((x,y-1,0))
-                    if x > 0:
-                        candidates.append((x-1, y-1, 0))
-                
-                all_cands += candidates
-            self.update_illegals(all_cands)
+        self.update_paths_after_pawn(move)
+
+        if self.wall_count > 0:
+            self.update_illegals(self.get_blockers(move_components))
 
     def get_wall_neighbors(self, seg):
         x, y, r = seg
@@ -185,18 +186,15 @@ class Gamestate:
         for ex, ey, er in segs:
             new_r = er - 1
             candidate = (ex, ey, new_r)
-            if candidate in self.open_placements:
-                placements.add(candidate)
-            
 
+            placements.add(candidate)
             if new_r == 0 and ex > 0:
                 alt_candidate = (ex - 1, ey, new_r)
-                if alt_candidate in self.open_placements:
-                    placements.add(alt_candidate)
+
+                placements.add(alt_candidate)
             elif ey > 0:
                 alt_candidate = (ex, ey - 1, new_r)
-                if alt_candidate in self.open_placements:
-                    placements.add(alt_candidate)
+                placements.add(alt_candidate)
                     
         return list(placements)
         # for neighbor in self.get_wall_neighbors((start_x, start_y, start_r + 1)):
@@ -225,59 +223,58 @@ class Gamestate:
 
         empties = list(set(empties))
 
-
         placements = set()
 
         for ex, ey, er in empties:
             new_r = er - 1
             candidate = (ex, ey, new_r)
-            if candidate in self.open_placements:
-                placements.add(candidate)
+            placements.add(candidate)
             if new_r == 0 and ex > 0:
                 alt_candidate = (ex - 1, ey, new_r)
-                if alt_candidate in self.open_placements:
-                    placements.add(alt_candidate)
+                placements.add(alt_candidate)
             elif ey > 0:
                 alt_candidate = (ex, ey - 1, new_r)
-                if alt_candidate in self.open_placements:
-                    placements.add(alt_candidate)
+                placements.add(alt_candidate)
 
-                    
         return list(placements)
+
+    def get_blockers(self, path):
+        # print(f"blockers path: {path}")
+        blockers = set()
+        for j in range(len(path)-1):
+            a = path[j]
+            b = path[j+1]
+            if a > b:
+                a, b = b, a
+            ax, ay = a
+            bx, by = b
+
+            if ax == bx:
+                for placement in ((ax, ay, 0), (ax-1, ay, 0)):
+                    blockers.add(placement)
+            if ay == by:
+                for placement in ((ax, ay-1, 1), (ax, ay, 1)):
+                    blockers.add(placement)
+        return blockers
 
     
     def get_path_overlaps(self):
         overlaps = {}
-        for i, position in enumerate(self.player_positions):
-            path = self.grid.astar_full_path(position, self.goals[i])
-            for j in range(len(path)-1):
-                a = path[j]
-                b = path[j+1]
-                if a > b:
-                    a, b = b, a
-                ax, ay = a
-                bx, by = b
-                if ax == bx:
-                    for placement,player in (((ax, ay, 0),i), ((ax-1, ay, 0),i)):
-                        if placement in self.open_placements:
-                            if placement not in overlaps:
-                                overlaps[placement] = []
-                            overlaps[placement].append(player)
-                if ay == by:
-                    for placement, player in (((ax, ay-1, 1),i), ((ax, ay, 1),i)):
-                        if placement in self.open_placements:
-                            if placement not in overlaps:
-                                overlaps[placement] = []
-                            overlaps[placement].append(player)
+        for i in range(self.player_count):
+            blockers = self.blockers[i]
+            for blocker in blockers:
+                if blocker not in overlaps:
+                    overlaps[blocker] = []
+                overlaps[blocker].append(i)
         return overlaps
     
     def narrow_paths(self, candidates):
         overlaps = self.get_path_overlaps()
+        # print(overlaps)
         cands = {cand: overlaps[cand] for cand in candidates if
                  cand in overlaps}
         return cands
                 
-
     def narrow_candidates(self, move):
         touches = self.grid.get_touches(move)
         if touches == 0:
@@ -287,24 +284,19 @@ class Gamestate:
         else:
             cands = self.get_connected_placements(move)
         cands = [cand for cand in cands if
-                 not self.grid.is_illegal(cand)
+                 cand in self.open_placements
                  and self.grid.get_touches(cand) == 2]
         return cands
       
-    
-    
-
     def remove_illegals(self, move):
         candidates = self.narrow_candidates(move)
         length = len(candidates)
         if length == 0:
             return
-        if length > self.player_count:
-            candidate_dict = self.narrow_paths(candidates)
-            illegals = self.get_illegals_greedy_targeted(candidate_dict)
-        else:
-            illegals = self.get_illegals_greedy(candidates)
 
+        candidate_dict = self.narrow_paths(candidates)
+        illegals = self.get_illegals_greedy_targeted(candidate_dict)
+        
         for illegal in illegals:
             self.open_placements.remove(illegal)
             self.grid.mark_illegal(illegal)
@@ -321,15 +313,15 @@ class Gamestate:
             self.grid.remove_wall(candidate)
         return illegals
     
-    def get_illegals_uf(self, candidates):
-        illegals = []
-        for placement in candidates:
-            self.grid.set_up_uf(placement)
-            for i, position, in enumerate(self.player_positions):
-                if not self.grid.connected_to_goal(position, self.goals[i]):
-                    illegals.append(placement)
-                    break
-        return illegals
+    # def get_illegals_uf(self, candidates):
+    #     illegals = []
+    #     for placement in candidates:
+    #         self.grid.set_up_uf(placement)
+    #         for i, position, in enumerate(self.player_positions):
+    #             if not self.grid.connected_to_goal(position, self.goals[i]):
+    #                 illegals.append(placement)
+    #                 break
+    #     return illegals
 
     def get_illegals_greedy(self, candidates):
         illegals = []
@@ -342,13 +334,13 @@ class Gamestate:
             self.grid.remove_wall(candidate)
         return illegals
 
-    def update_goals(self):
-        self.grid.set_up_uf()
-        for i, position in enumerate(self.player_positions):
-            r = find(self.grid.parent, grid_index(position[0], position[1]))
-            self.goals[i] = {spot for spot in self.goals[i] if find(self.grid.parent, grid_index(spot[0], spot[1])) == r}
-        # print([len(g) for g in self.goals])
-        pass
+    # def update_goals(self):
+    #     self.grid.set_up_uf()
+    #     for i, position in enumerate(self.player_positions):
+    #         r = find(self.grid.parent, grid_index(position[0], position[1]))
+    #         self.goals[i] = {spot for spot in self.goals[i] if find(self.grid.parent, grid_index(spot[0], spot[1])) == r}
+    #     # print([len(g) for g in self.goals])
+    #     pass
     
     def update_illegals(self, candidates):
         marked_illegal = []
@@ -366,6 +358,9 @@ class Gamestate:
                 self.open_placements.add(c)
 
         new_illegals = self.get_illegals_greedy(marked_legal)
+        # if len(new_illegals) > 0:
+            # print(self)
+            # print(new_illegals)
 
         for c in marked_legal:
             if c in new_illegals:
@@ -385,13 +380,12 @@ class Gamestate:
     
 
     def evaluate_early(self):
-        degree = 2#self.player_count
+        degree = self.player_count + 1
         l = -1
         lowest = float("inf")
         second = float("inf")
-        for i, coords in enumerate(self.player_positions):
-            goals = self.goals[i]
-            curr = self.grid.astar_distance(coords, goals)
+        for i in range(self.player_count):
+            curr = len(self.paths[i])
             if curr < lowest:
                 second = lowest
                 lowest = curr
@@ -401,7 +395,6 @@ class Gamestate:
 
         if lowest <= second-degree:
             self.winner = l
-            # print("cut off early")
             self.over = True
 
     def get_move_weighted(self, weighting):
@@ -413,9 +406,8 @@ class Gamestate:
                     self.wall_count = 0
         return choice(self.get_legal_pawn_moves())
 
-
     def get_fastest_move(self):
-        move_candidate = self.grid.astar_first_move(self.player_positions[self.player_up], self.goals[self.player_up])
+        move_candidate = self.paths[self.player_up][1]
         if move_candidate in self.get_legal_pawn_moves():
             return move_candidate
         return choice(self.get_legal_pawn_moves())
@@ -474,7 +466,7 @@ if __name__ == "__main__":
     profiler = cProfile.Profile()
     profiler.enable()  
     
-    for i in range(1):
+    for i in range(1000):
         g = Gamestate()
         g.set_up_as_start(2)
         # print(g)    
@@ -482,14 +474,15 @@ if __name__ == "__main__":
         while not g.over:
             # move = g.get_rollout_move(0.1)
             move = g.get_random_move()
-            print(move)
+            # print(move)
             # print(move)
             g.play_move(move)
 
-            # g.try_early_eval()
+            g.try_early_eval()
             j += 1
             
-            print(g)
+            # print(g)
+        # print(g)
         if i % 100 == 0:
             print(i)
     profiler.disable()  
