@@ -1,3 +1,5 @@
+import random
+
 def get_display_string(grid, orientation=0):
         output = []
         output.append(" " + "_ " * 9)
@@ -31,7 +33,7 @@ def get_display_string(grid, orientation=0):
         return "".join(output)
 
 
-def get_display_string_pl(grid, player_positions = [], orientation=0):
+def get_display_string_pl(grid, player_positions = [], orientation=0, player_walls = False):
         or_pos = []
         symbs = [("߸","•"), ("⍛","○"), ("⍙","∆"), ("⍚","◇"),]
 
@@ -78,4 +80,10 @@ def get_display_string_pl(grid, player_positions = [], orientation=0):
 
                 output.append(sou if q & s else nsou)
                 output.append("|" if q & e else " ")
+            if player_walls:
+                if i < len(player_walls):
+                    output.append(str(player_walls[i]))
         return "".join(output)
+
+def bool_prob(probability):
+    return random.random() < probability

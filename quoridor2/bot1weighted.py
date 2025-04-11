@@ -1,16 +1,14 @@
 from player import Player
 from random import choice, shuffle
-from mcts_node import MctsNode as MN
+from mcts_node_with_weighting import MctsNodeWeighted as MNW
 
-class Bot(Player):
+class BotWeighted(Player):
     def __init__(self, calcs):
         self.calcs = calcs
-        
+
     def choose_move(self, gamestate):
-        root = MN(gamestate, gamestate.player_up)
+        root = MNW(gamestate, gamestate.player_up)
         root.get_moves()
-        if gamestate.wall_count == 0:
-            self.calcs = 500
         print(root.get_player())
         shuffle(root.untried_moves)
         curr = root
@@ -29,12 +27,13 @@ class Bot(Player):
             
             if not curr.gamestate.over:
                 child = curr.spawn_child()
+                
+                # print(child)
+                # simulation
                 results = child.rollout_single()
-                # results = child.rollout_favor()
 
                 contrib = sum(results)
                 num = len(results)
-                curr = child
             else:
                 contrib = 1 if curr.gamestate.winner == gamestate.player_up else 0
                 num = 1
@@ -42,7 +41,7 @@ class Bot(Player):
 
             # print([(c.wins, c.visits) for c in root.children])
             #backprop
-            
+            curr = child
             chain.append((curr.get_player(), curr.reached_by))
             
             while True:

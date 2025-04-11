@@ -24,8 +24,9 @@ import math
 
 
 
-class MctsNode:
-    def __init__(self, gamestate, player, reached_by=None, parent = None):
+class MctsNodeWeighted:
+    def __init__(self, gamestate, player, reached_by=None, parent = None, depth = 0):
+        self.depth = depth
         self.gamestate = gamestate.get_clone()
         self.reached_by = reached_by
         self.player = player
@@ -55,7 +56,7 @@ class MctsNode:
         move = self.untried_moves.pop()
         if len(self.untried_moves) == 0:
             self.fully_expanded = True
-        child = MctsNode(self.gamestate, self.player, move, self)
+        child = MctsNodeWeighted(self.gamestate, self.player, move, self, self.depth+1)
         
         child.gamestate.play_move(move)
         child.get_moves()
@@ -80,30 +81,32 @@ class MctsNode:
         
         rollie = self.gamestate.get_clone()
         moves = []
-        i = 0
-        rollie.try_early_eval()
+        rollout_depth = 0
         while not rollie.over:
-
-            move = rollie.get_rollout_move_guided(favored_prob = 0.1, 
-                                                  favored_pawn = 0.66, 
-                                                  unfavored_pawn = 0.3)
+            # print('hi', rollie.wall_count, rollie.player_walls)
+     
+            move = rollie.get_rollout_move()
             moves.append(move)
             
       
             if move == None:
                 rollie.skip_turn()
                 continue
-        
+            
             rollie.play_move(move)
             rollie.try_early_eval()
- 
-        # if the move that got us here was a pawn move
-        if len(self.reached_by) == 2:
-            return [1] if rollie.winner == self.player else [0]
-        return [1]if rollie.winner == self.player else [0]
+
+
+            rollout_depth += 1
+    
+        reward = 2 / ( 1+ self.depth + rollout_depth)
+
+        return [reward] if rollie.winner == self.player else [0]
+
+
     
 
-
+        
     def __repr__(self):
         return f"Wins: {self.wins}\nTotal: {self.visits}\n" + str(self.gamestate) + "\n"
 

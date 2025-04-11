@@ -1,15 +1,23 @@
 from board import Board
 from player import Player
 from bot1 import Bot
+from bot1weighted import BotWeighted
+from human import Human
 
 
 class Game:
     def __init__(self):
         self.players = [
-            Bot(),
-            Bot(),
+            # Bot(1000),x
+            # Human(),
+
+            Bot(10000),
+            Bot(10000),
+            # Bot(10000),
+            # Bot(10000),
             # Bot(),
-            # Player(),
+            
+            
             # Player(),
         ] 
         self.board = Board(len(self.players))

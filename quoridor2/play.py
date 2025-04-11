@@ -2,10 +2,12 @@ from gamestate import Gamestate
 from game import Game
 import cProfile
 import pstats
+from random import seed
 
 if __name__ == "__main__":
     profiler = cProfile.Profile()
     profiler.enable()  
+    seed('bagel')
     
     g= Game()
     g.play()
