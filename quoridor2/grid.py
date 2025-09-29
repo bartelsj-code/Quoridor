@@ -1,5 +1,5 @@
 import numpy as np
-from utils import get_display_string, get_display_string_pl
+from utils import get_display_string, get_display_string_pl #get_neighbors_numba
 from union_find import *
 import heapq
 
@@ -40,9 +40,9 @@ class SquareGrid:
     def unmark_illegal(self, placement):
         x, y, r = placement
         if r:
-            self.arr[x, y] &= ~32
+            self.arr[x, y] &= 0xFF ^ 32
         else:
-            self.arr[x, y] &= ~16
+            self.arr[x, y] &= 0xFF ^ 16
 
     def block_single(self, coords, side):
         x, y = coords
@@ -50,7 +50,7 @@ class SquareGrid:
 
     def unblock_single(self, coords, side):
         x, y = coords
-        self.arr[x, y] &= ~side
+        self.arr[x, y] &= 0xFF ^ side
 
     def add_wall(self, placement):
         x, y, r = placement
@@ -68,21 +68,21 @@ class SquareGrid:
     def remove_wall(self, placement):
         x, y, r = placement
         if r == 0:
-            self.arr[x, y]     &= ~1
-            self.arr[x+1, y]   &= ~1
-            self.arr[x+1, y+1] &= ~4
-            self.arr[x, y+1]   &= ~4
+            self.arr[x, y]     &= 0xFF ^ 1
+            self.arr[x+1, y]   &= 0xFF ^ 1
+            self.arr[x+1, y+1] &= 0xFF ^ 4
+            self.arr[x, y+1]   &= 0xFF ^ 4
         else:
-            self.arr[x, y]     &= ~2
-            self.arr[x+1, y]   &= ~8
-            self.arr[x+1, y+1] &= ~8
-            self.arr[x, y+1]   &= ~2
+            self.arr[x, y]     &= 0xFF ^ 2
+            self.arr[x+1, y]   &= 0xFF ^ 8
+            self.arr[x+1, y+1] &= 0xFF ^ 8
+            self.arr[x, y+1]   &= 0xFF ^ 2
 
     def has_wall(self, x, y, face):
         return self.arr[x, y] & face
     
     def remove_pawn(self, coords):
-        self.arr[coords[0], coords[1]] &= ~64
+        self.arr[coords[0], coords[1]] &= 0xFF ^ 64
 
     def add_pawn(self, coords):
         self.arr[coords[0], coords[1]] |= 64
@@ -126,22 +126,22 @@ class SquareGrid:
     
     def clear_all(self):
         self.arr &= 127
-
-    # def get_blocked_pairs(self, placement):
-    #     x, y, r = placement
-    #     if r:
-    #         return [((x, y), (x+1, y)), ((x, y+1), (x+1, y+1))]
-    #     return [((x, y), (x, y+1)), ((x+1, y), (x+1, y+1))]
     
     def get_neighbors(self, p):
         x, y = p
+
+        # neighbors_array = get_neighbors_numba(self.arr, x, y)
+
+        # g =  [tuple(coord) for coord in neighbors_array]
+        # return g
         barriers = (1, 2, 4, 8)
         cell_value = self.arr[x, y]  
-        
-        return [
+        org = [
             (nx, ny) for i, (dx, dy) in enumerate([(0, 1), (1, 0), (0, -1), (-1, 0)])
             if 0 <= (nx := x + dx) < 9 and 0 <= (ny := y + dy) < 9 and not (cell_value & barriers[i])
         ]
+
+        return org
     
     ###########  LEGACY? No?  ######################
 

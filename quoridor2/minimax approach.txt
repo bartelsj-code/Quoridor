@@ -1,0 +1,40 @@
+branching factor: 128 + 4
+Maybe only explore top 35 moves or something like that. (But last resort)
+
+
+Alpha-beta pruning improvement:
+1. Strong heuristic.
+    Strong contributors:
+        a. Difference in distance to goal for self vs opponents
+        b. Walls remaining to players. (Maybe each wall remaining counts as a specific avg increase in distance, better if dynamic but probably faster if static)
+        c. 
+
+2. Zero depth branch organizer.
+    Move order priority:
+        a. Pawn moves along shortest path
+        b. Other Pawn Moves 
+        c. Moves that lay on opponent paths but not on own.
+        d. Moves that block? Not sure how to encode.
+
+        e. Other 
+        
+        f.Moves blocking own path.
+
+ 
+
+Minimax Primary Structure:
+    Since the branching factor is so high, storing anything is really expensive. 131 ^ depth. This argues strongly for a iterative deepening approach. This means that move order quality cannot be stored well between iterations as it could be with a low branching factor. All the more reason for this to be highly optimized.
+
+
+Another approach:  MCTS with a minimax-based heuristic.
+
+
+Forward Pruning:
+    End-states
+
+
+For MCTS:
+
+Instead of random choice branch searches: Dynamic Minimax decision trees. Depth of Minimax increases as depth of MCTS increases, or more importantly as branching factors decline. Maybe a preset number of Minimax gamestate visits per step. This will greatly slow down MC
+
+

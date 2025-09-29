@@ -1,14 +1,35 @@
 from grid import SquareGrid
 import numpy as np
 from utils import *
-from random import choice, random, seed
-from union_find import find, grid_index
+from random import choice, random, seed, randint
+from union_find import *
 import cProfile
 import pstats
 from copy import deepcopy
 
 
 class Gamestate:
+    
+    ###############################  Overview  ##################################
+    '''
+    This class stores a Quoridor game position and some additional data and is written to be flexible so it can be used in a variety of simulations and in the base game
+
+    Important Variables:
+        self.grid: a SquareGrid object containing a 9x9 numpy array storing the walls, occupation, and adjacencies of each square in the position.
+        self.open_placements: a set of all legal wall placement tuples for the current position (gets updated as game progresses but avoids re-evaluation)
+
+        self.player_up: an int indicating which player is "at bat"
+        self.over: indicates whether the game has reached an end state
+        self.winner: indicates which player has won if the game has reached an end state
+
+        The following lists are indexed 0 to 3 to access specific player's data often using self.player_up.
+            self.player_positions: a list of tuples, each of which has an x and a y coordinate
+            self.player_walls: a list of ints tracking how many walls each player has remaining to them
+            self.goals: a list of sets of coordinates which are the goals for each respective player
+            self.paths: a list of lists of coordinates. Each sublist is the shortest path from the player's coordinates to a goal square
+            self.blockers: a list of sets of placement tuples. Placments in player i's set intersect player i's path.
+    '''
+
 
     ##########################  Instance Initiations  ###########################
 
@@ -32,7 +53,7 @@ class Gamestate:
 
         ###### set up walls  #######
         self.player_walls = [total_walls//player_count]*player_count  
-        self.wall_count = total_walls  
+        self.wall_count = sum(self.player_walls)
 
         ###### set up grid  #######
         self.grid = SquareGrid()  
@@ -59,7 +80,7 @@ class Gamestate:
         Returns:
             Gamestate object that matches self 
         '''
-        clone = Gamestate()
+        clone = type(self)()
         clone.player_count = self.player_count
         clone.over = self.over
         clone.player_up = self.player_up
@@ -73,7 +94,8 @@ class Gamestate:
         clone.blockers = [b.copy() for b in self.blockers]
         clone.winner = self.winner
         return clone
-
+    
+    
     ############################  Move Execution  ############################
 
     def play_move(self, move):
@@ -84,7 +106,7 @@ class Gamestate:
             Move - Can take the following forms: 
                 (x, y, r)            | A wall placement centered at the north-east corner of the square at x, y. Horizontal if r == 0 and Vertical if r == 1
                 (x, y)               | Indicates a pawn move from the current square to the square at x, y.
-                ((x1, y1),(x2, y2))  | Indicates a pawn move that involves a jump over another pawn. Ends at x2, y2. Potential to grow to more moves if multi jumps are permitted.
+                ((x1, y1),(x2, y2))  | Indicates a pawn move that involves a jump over another pawn. Ends at x2, y2. 
         '''
 
         if self.move_is_placement(move):
@@ -114,13 +136,14 @@ class Gamestate:
         #update remaining wall info
         self.player_walls[self.player_up] -= 1
         self.wall_count-=1
-        if self.wall_count == 0 :
-            # if no more walls, empty open_placements
-            self.open_placements = set()
-            return 
 
         #update shortest path 
         self.update_paths_after_placement(move)
+
+        # if no more walls, empty open_placements
+        if self.wall_count == 0 :
+            self.open_placements = set()
+            return 
         
         #remove unplayable moves from open_placements
         self.remove_physicals(move)
@@ -151,8 +174,8 @@ class Gamestate:
 
     ############################### Path Caching ##################################
 
-    #The gamestate stores the current shortest path and the placements that intersect it. 
-    #This has value in narrowing illegal move candidates and making good moves in rollout.
+    '''The gamestate stores the current shortest path and the placements that intersect it. 
+    This has value in narrowing illegal move candidates and making good moves in rollout.'''
 
     def update_path(self, player):
         #sets the path for a player to the shortest currently available path
@@ -163,13 +186,18 @@ class Gamestate:
         for i in range(self.player_count):
             blockers = self.blockers[i]
             if move in blockers:
-                self.update_path(i)
+                self.update_path(i)               
                 self.blockers[i] = self.get_blockers(self.paths[i])
-
+    
     def update_paths_after_pawn(self, move):
         #updates the current player's path after their pawn is moved. 
+
         if self.paths[self.player_up][1] == self.player_positions[self.player_up]:
             path = self.paths[self.player_up][1:]
+            # path1 = self.grid.astar_full_path(self.player_positions[self.player_up], self.goals[self.player_up])
+            # if path != path1:
+            #     print(path,"\n", path1)
+
             self.paths[self.player_up] = path
             #ToDo, possibly change how blockers work: storing them in dict with number of uses so that blockers can be removed
             #rather than completely re-evaluating the set.
@@ -203,16 +231,25 @@ class Gamestate:
             if ay == by:
                 for placement in ((ax, ay-1, 1), (ax, ay, 1)):
                     blockers.add(placement)
+
         return blockers
 
     ############################  Legal move queries  ##############################
 
     def get_legal_moves(self):
+        '''
+        Returns List of legal moves
+        '''
         # returns a list of all legal moves combined
         return self.get_legal_placements() + self.get_legal_pawn_moves()
     
     def get_legal_pawn_moves(self):
-        #returns a list of legal pawn moves
+        '''
+        Determines legal pawn moves for player_up
+
+        Returns:
+            options: A list of move tuples
+        '''
         start = self.player_positions[self.player_up]
         options = []
         neighbors = self.grid.get_neighbors(start)
@@ -238,13 +275,89 @@ class Gamestate:
         if self.player_walls[self.player_up] > 0:
             return list(self.open_placements)
         return []
-
-    ############################       #################################
-    def move_is_placement(self, move):
-        return len(move) == 3 and type(move[2]) == int
     
+    ################## Remove Placements from Open Placements  ################=
+
+    def remove_physicals(self, placement):
+        '''
+        Removes placements that intersect with the played move from open_placements
+        Only called after a placement is played
+        
+        Args:
+            move:  The placement that was just played
+        '''
+        x, y, r = placement
+        if r == 0:
+            for dx in (-1, 0, 1):
+                nx = x + dx
+                if 0 <= nx < 8:
+                    self.open_placements.discard((nx, y, r))
+                    self.grid.unmark_illegal((nx, y, r))
+        else:
+            for dy in (-1, 0, 1):
+                ny = y + dy
+                if 0 <= ny < 8:
+                    self.open_placements.discard((x, ny, r))
+                    self.grid.unmark_illegal((x, ny, r))
+    
+        if 0 <= x < 8 and 0 <= y < 8:
+            self.open_placements.discard((x, y, 1 - r))
+            self.grid.unmark_illegal((x, y, 1 - r))
+
+    def remove_illegals(self, placement):
+        '''
+        removes all moves made illegal by placement from open_placements
+
+        Args:
+            Placement: Placment tuple
+        '''
+        candidates = self.narrow_candidates(placement)
+        length = len(candidates)
+        if length == 0:
+            return
+        
+        candidate_dict = self.narrow_paths(candidates)
+        
+        for illegal in self.get_illegals_greedy_targeted(candidate_dict):
+            self.remove_illegal(illegal)
+
+    def update_illegals(self, candidates):
+        '''
+        Handles additions to illegal set from set of candidates'''
+        marked_illegal = []
+        marked_legal = []
+
+        # One loop: classify candidates
+        for candidate in candidates:
+            if self.grid.is_illegal(candidate):
+                marked_illegal.append(candidate)
+            elif candidate in self.open_placements:
+                marked_legal.append(candidate)
+
+        # Get all new illegal statuses in one go, if you can
+        check_set = marked_illegal + marked_legal
+        new_illegals = self.get_illegals_greedy(check_set)
+        new_illegals_set = set(new_illegals)
+
+        for c in marked_illegal:
+            if c not in new_illegals_set:
+                self.grid.unmark_illegal(c)
+                self.open_placements.add(c)
+
+        for c in marked_legal:
+            if c in new_illegals_set:
+                self.remove_illegal(c)
+
+    def remove_illegal(self, placement):
+
+        ''' Sets a placement's status to legal again '''
+        self.open_placements.remove(placement)
+        self.grid.mark_illegal(placement)
+
     def update_player(self):
         self.player_up = (self.player_up + 1) % self.player_count
+
+###############################  Finding Candidates for illegal placements  #####################################
     
     def get_wall_neighbors(self, seg):
         x, y, r = seg
@@ -367,21 +480,9 @@ class Gamestate:
                  cand in self.open_placements
                  and self.grid.get_touches(cand) == 2]
         return cands
-      
-    def remove_illegals(self, move):
-        candidates = self.narrow_candidates(move)
-        length = len(candidates)
-        if length == 0:
-            return
-
-        candidate_dict = self.narrow_paths(candidates)
-        illegals = self.get_illegals_greedy_targeted(candidate_dict)
-        
-        for illegal in illegals:
-            self.open_placements.remove(illegal)
-            self.grid.mark_illegal(illegal)
     
     def get_illegals_greedy_targeted(self, candidates):
+        '''goes through all candidates with additional criteria of the players that may be affected'''
         illegals = []
         for candidate, players in candidates.items():
             self.grid.add_wall(candidate)
@@ -404,119 +505,14 @@ class Gamestate:
             self.grid.remove_wall(candidate)
         return illegals
 
-    def update_illegals(self, candidates):
-        marked_illegal = []
-        marked_legal = []
-        for candidate in candidates:
-            if self.grid.is_illegal(candidate):
-                marked_illegal.append(candidate)
-            elif candidate in self.open_placements:
-                marked_legal.append(candidate)
-
-        illegals = self.get_illegals_greedy(marked_illegal)
-        for c in marked_illegal:
-            if c not in illegals:
-                self.grid.unmark_illegal(c)
-                self.open_placements.add(c)
-
-        new_illegals = self.get_illegals_greedy(marked_legal)
-
-
-        for c in marked_legal:
-            if c in new_illegals:
-                self.grid.mark_illegal(c)
-                self.open_placements.discard(c)
-
     def has_won(self, player):
         t = (8, 0)
         if player < 2:
             return self.player_positions[player][1] == t[player%2]
         return  self.player_positions[player][0] == t[player%2]
 
-    def try_early_eval(self):
-        if self.wall_count == 0:
-            self.evaluate_early()
-
-    def evaluate_early(self):
-        degree = self.player_count + 2
-        l = -1
-        lowest = float("inf")
-        second = float("inf")
-        for i in range(self.player_count):
-            curr = len(self.paths[i])
-            if curr < lowest:
-                second = lowest
-                lowest = curr
-                l = i
-            elif curr < second:
-                second = curr
-
-        if lowest <= second-degree:
-            self.winner = l
-            self.over = True
-
-    def get_rollout_move_guided(self, favored_prob, favored_pawn, unfavored_pawn):
-        if bool_prob(favored_prob):
-            if self.player_walls[self.player_up] != 0 and not bool_prob(favored_pawn):
-                return self.get_favorable_placement()
-            return self.get_fastest_move()
-        else:
-            if self.player_walls[self.player_up] != 0 and not bool_prob(unfavored_pawn):
-                return choice(self.get_legal_placements())
-            return choice(self.get_legal_pawn_moves())
-
-    def get_fastest_move(self):
-        move_candidate = self.paths[self.player_up][1]
-        if move_candidate in self.get_legal_pawn_moves():
-            return move_candidate
-        return choice(self.get_legal_pawn_moves())
-    
-    def get_favorable_placement(self):
-        block_others = set()
-        for i in range(self.player_count):
-            if i == self.player_up:
-                continue
-            for blocker in self.blockers[i]:
-                if blocker in self.blockers[self.player_up]:
-                    continue
-                elif blocker in self.open_placements:
-                    block_others.add(blocker)
-        if len(block_others) > 0:
-            return choice(list(block_others))
-        else:
-            return choice(list(self.open_placements))
-
-    def get_rollout_move(self):
-        return 
-    
-    def get_random_move(self):
-        return choice(self.get_legal_moves())
-        
     def get_start_placements(self):
         return {(x, y, r) for r in range(2) for x in range(8) for y in range(8)}
-
-    def __str__(self):
-        symbs = ("•","○","∆","◇")
-        return get_display_string_pl(self.grid.arr, self.player_positions, 0, player_walls=self.player_walls) + f"player {symbs[self.player_up]} Winner: {symbs[self.winner] if self.winner is not None else 'N/A'}"  
-    
-    def remove_physicals(self, move):
-        x, y, r = move
-        if r == 0:
-            for dx in (-1, 0, 1):
-                nx = x + dx
-                if 0 <= nx < 8:
-                    self.open_placements.discard((nx, y, r))
-                    self.grid.unmark_illegal((nx, y, r))
-        else:
-            for dy in (-1, 0, 1):
-                ny = y + dy
-                if 0 <= ny < 8:
-                    self.open_placements.discard((x, ny, r))
-                    self.grid.unmark_illegal((x, ny, r))
-    
-        if 0 <= x < 8 and 0 <= y < 8:
-            self.open_placements.discard((x, y, 1 - r))
-            self.grid.unmark_illegal((x, y, 1 - r))
 
     def get_starting_goals(self):
         return [
@@ -526,88 +522,26 @@ class Gamestate:
         set([(0,i) for i in range(9)]),
         ][:self.player_count]
     
+    
+    
+    ############################  Misc  #################################
+
+    def __str__(self):
+        symbs = ("•","○","∆","◇")
+        return get_display_string_pl(self.grid.arr, self.player_positions, 0, player_walls=self.player_walls) + f"player {symbs[self.player_up]} Winner: {symbs[self.winner] if self.winner is not None else 'N/A'}"  
+    
+    def move_is_placement(self, move):
+        return len(move) == 3 and type(move[2]) == int
+    
     def show_path(self, path):
-        # debugging function for visualizing set of coords
+        # debugging method for visualizing paths
         for square in path:
             self.grid.mark(square)
         print(self)
         self.grid.clear_all()
     
-    
         
-if __name__ == "__main__":
-    print("running gamestate")
-    # g = Gamestate()
-    # g.set_up_as_start(2)
-    # moves = [(1,3,1), (2,4,1), (7, 5, 0), (5, 8), (5, 0), (6, 8), (2, 7, 0), (1, 0, 1), (2, 0, 1), (6, 7), (4, 0), (7, 7), (6, 0, 1), (1, 6, 0), (4, 1), (6, 7), (3, 1, 1), (4, 5, 1), (4, 2), (3, 6, 0), (5, 1, 1), (6, 8), (5, 2), (7, 8), (5, 1), (6, 5, 1), (4, 1), (7, 7), (1, 5, 0), (7, 6), (0, 7, 0), (0, 5, 1), (7, 7, 1), (7, 7), (5, 1), (6, 7), (5, 2), (6, 6, 0), (4, 2), (5, 7, 1), (5, 2), (0, 2, 1), (4, 2), (7, 7)]
-    # for move in moves[:32]:
-    #     g.play_move(move)
-    #     print(g)
-    # for move in moves[32:39]:
-        
-    #     print(f"path stored: {g.paths[1]}")
-    #     f = list(g.blockers[1])
-    #     f.sort()
-    #     print(f"blockers of that path{f}")
-    #     g.show_path(g.paths[1])
-    #     g.play_move(move)
-    #     print(g)
 
-
-
-
-    # profiler = cProfile.Profile()
-    # profiler.enable()  
     
-    g = Gamestate()
-    g.set_up_as_start(2)
 
 
-    for i in range(1):
-
-        print(g)    
-        j = 0
-        while not g.over:
-            move = g.get_rollout_move()
-            print(move)
-            g.play_move(move)
-            print(g)
-            g.try_early_eval()
-            j += 1
-            
-        if i % 100 == 0:
-
-            print(i)
-    # profiler.disable()  
-    # stats = pstats.Stats(profiler).sort_stats('cumulative')
-    # stats.print_stats(5)
-
-    # g.play_move((0,5,0))
-    
-    
-    # g.play_move((4,5,0))
-    # g.play_move((2,5,0))
-    # g.play_wall((6,5,0))
-    
-    # g.play_wall((7,5,1))
-    # # print(g)
-    # # print(g.finds)
-    # g.play_wall((5,4,1))
-    # # print(g)
-    # # print(g.finds)
-    # g.play_wall((7,1,0))
-    # g.play_wall((5,3,0))
-    # g.play_wall((5,1,0))
-    # g.play_wall((3,1,0))
-    
-    # # print(g)
-    # # print(g.finds)
-    # g.play_move((6,1,1))
-    # g.play_wall((2,2,1))
-    # g.play_move((0,4,1))
-
-    # g.play_move((7,7,0))
-
-    # g.play_wall((2,5,0))
-    # print(g)
-    # print(g.finds)

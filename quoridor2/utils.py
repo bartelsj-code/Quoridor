@@ -1,4 +1,6 @@
 import random
+# from numba import njit
+import numpy as np
 
 def get_display_string(grid, orientation=0):
         output = []
@@ -80,10 +82,37 @@ def get_display_string_pl(grid, player_positions = [], orientation=0, player_wal
 
                 output.append(sou if q & s else nsou)
                 output.append("|" if q & e else " ")
+
+            if i == 0:
+                
+                output.append(str(sum(player_walls)))
             if player_walls:
-                if i < len(player_walls):
-                    output.append(str(player_walls[i]))
+                if  0 < i < len(player_walls) + 1:
+                    output.append(str(player_walls[i-1]))
         return "".join(output)
 
 def bool_prob(probability):
     return random.random() < probability
+
+# @njit 
+# def get_neighbors_numba(arr, x, y):
+#     res = np.empty((4, 2), dtype=np.int64)
+#     count = 0
+#     cell_value = arr[x, y]
+#     if y < 8 and not (cell_value & 1):
+#         res[count, 0] = x
+#         res[count, 1] = y + 1
+#         count += 1
+#     if x < 8 and not (cell_value & 2):
+#         res[count, 0] = x + 1
+#         res[count, 1] = y
+#         count += 1
+#     if y > 0 and not (cell_value & 4):
+#         res[count, 0] = x
+#         res[count, 1] = y - 1
+#         count += 1
+#     if x > 0 and not (cell_value & 8):
+#         res[count, 0] = x - 1
+#         res[count, 1] = y
+#         count += 1
+#     return res[:count]
